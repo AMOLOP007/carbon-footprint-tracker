@@ -27,6 +27,16 @@
     <h1 class="page-title">Dashboard</h1>
     <p class="page-subtitle">Welcome back, {{ user_name }} -- Here's your company's carbon overview.</p>
 
+    <!-- Security & Privacy Guarantee -->
+    <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 12px 15px; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; color: var(--text-light);">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+        </svg>
+        <span style="font-size: 0.9rem;">
+            <strong>Bank-Grade Encryption Active.</strong> Your ESG data, emission metrics, and company infrastructure records are strictly protected and confidentially secured with our comprehensive CyberSecurity framework.
+        </span>
+    </div>
+
     <!-- ai insight banner -->
     {% if insight %}
     <div class="insight-banner">

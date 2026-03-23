@@ -19,7 +19,33 @@ import requests as http_requests  # renamed to avoid conflict with flask.request
 load_dotenv('.env.local')
 
 app = Flask(__name__)
-app.secret_key = "aetherra_secret_123"
+# Generate a cryptographically strong secret key natively
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", os.urandom(32).hex())
+
+# ========== SECURITY HARDENING ==========
+@app.after_request
+def apply_security_headers(response):
+    # Prevent Clickjacking
+    response.headers["X-Frame-Options"] = "DENY"
+    # Prevent MIME-Sniffing and injection
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # HTTP Strict Transport Security (HSTS)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    # Browser XSS Filter
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    # Content Security Policy (CSP - explicitly defining safe sources)
+    csp = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://npmcdn.com; "
+        "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://npmcdn.com; "
+        "img-src 'self' data: https:; "
+        "object-src 'none'; "
+        "base-uri 'self';"
+    )
+    response.headers["Content-Security-Policy"] = csp
+    # Referrer Policy
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 # google oauth stuff
 oauth = OAuth(app)
