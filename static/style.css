@@ -677,5 +677,48 @@ body {
     .page-content { padding: 20px; }
     .auth-card { padding: 35px 25px; }
     .splash-buttons { flex-direction: column; width: 100%; }
-    .splash-buttons .btn { width: 100%; text-align: center; margin-bottom: 12px; }
 }
+
+/* ---- LIGHT THEME OVERRIDES ---- */
+[data-theme='light'] body {
+    color: #1e293b;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
+    animation: none;
+}
+[data-theme='light'] .navbar { background: rgba(255,255,255,0.9); border-bottom: 1px solid rgba(0,0,0,0.1); color: #0f172a; }
+[data-theme='light'] .navbar .nav-links a { color: #64748b; }
+[data-theme='light'] .navbar .nav-links a:hover, [data-theme='light'] .navbar .nav-links a.active { color: #0f172a; background: rgba(16, 185, 129, 0.1); }
+[data-theme='light'] .card, [data-theme='light'] .report-card, [data-theme='light'] .stat-card, [data-theme='light'] .calc-section, [data-theme='light'] .auth-card {
+    background: rgba(255,255,255,0.85); border-color: rgba(0,0,0,0.1); box-shadow: 0 10px 25px rgba(0,0,0,0.05); color: #0f172a;
+}
+[data-theme='light'] .card h3, [data-theme='light'] .report-card h4, [data-theme='light'] .page-title, [data-theme='light'] .auth-card h2, [data-theme='light'] .auth-card .logo-area span { color: #0f172a; }
+[data-theme='light'] .form-group label, [data-theme='light'] .stat-card .label, [data-theme='light'] .page-subtitle, [data-theme='light'] .auth-card .subtitle { color: #475569; }
+[data-theme='light'] .form-group input, [data-theme='light'] .form-group select {
+    background: #ffffff; border: 1px solid #cbd5e1; color: #0f172a;
+}
+[data-theme='light'] .form-group select option { background: #fff; color: #0f172a; }
+[data-theme='light'] .stat-card .value { color: #0f172a; }
+[data-theme='light'] .stat-card.grey .value { color: #475569; }
+[data-theme='light'] .emission-table th { background: #f1f5f9; color: #475569; border-bottom-color: #e2e8f0; }
+[data-theme='light'] .emission-table td { color: #1e293b; border-bottom-color: #e2e8f0; }
+[data-theme='light'] .emission-table tr:hover td { background: #f8fafc; }
+[data-theme='light'] .btn-dark { background: #1e293b; color: white; border-color: #1e293b; }
+[data-theme='light'] .btn-dark:hover { background: #0f172a; }
+[data-theme='light'] .btn-outline { background: white; color: #10b981; border-color: #10b981; }
+[data-theme='light'] .btn-google { background: white; color: #333; border-color: #ccc; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+[data-theme='light'] .insight-list li { background: #ffffff; border-color: #e2e8f0; color: #334155; }
+[data-theme='light'] .result-box { background: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.2); }
+[data-theme='light'] .result-row { border-bottom-color: rgba(16, 185, 129, 0.2); }
+[data-theme='light'] .result-row .cat { color: #475569; }
+[data-theme='light'] .result-total .cat { color: #0f172a; }
+[data-theme='light'] .divider::before { background: rgba(0,0,0,0.1); }
+[data-theme='light'] .divider span { background: #f8fafc; }
+[data-theme='light'] .splash-page { background: linear-gradient(to bottom right, #f8fafc, #e2e8f0); }
+[data-theme='light'] .splash-page h1 { color: #0f172a; text-shadow: none; }
+[data-theme='light'] .splash-page p { color: #475569; }
+[data-theme='light'] .auth-page { background: linear-gradient(to bottom right, #f8fafc, #e2e8f0); }
+[data-theme='light'] .item-row { background: #f8fafc; border-color: #e2e8f0; }
+[data-theme='light'] .item-row label { color: #475569; }
+[data-theme='light'] .goals-section { background: rgba(16, 185, 129, 0.05); border-color: #10b981; }
+[data-theme='light'] .navbar .logo-area span { color: #0f172a; }
+[data-theme='light'] .report-footer-card { background: linear-gradient(270deg, rgba(16, 185, 129, 0.05), rgba(59, 130, 246, 0.05), rgba(16, 185, 129, 0.05)); }

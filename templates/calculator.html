@@ -6,6 +6,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ domain|title }} Emissions Calculator - Aetherra</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    
+    <!-- Flatpickr Core & Plugin -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/style.css">
+    <!-- Dynamic Flatpickr Theme -->
+    <link id="flatpickr-theme" rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/dark.css">
+
     <style>
         .item-row { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; padding: 12px; background: rgba(255,255,255,0.03); border-radius: 8px; border: 1px solid #222; flex-wrap: wrap; }
         .item-row input, .item-row select { flex: 1; min-width: 100px; }
@@ -376,5 +383,21 @@ async function calcMapDistance() {
 </script>
 
 <script src="{{ url_for('static', filename='script.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/plugins/monthSelect/index.js"></script>
+<script>
+    flatpickr("#report_month", {
+        plugins: [
+            new monthSelectPlugin({
+              shorthand: true, //defaults to false
+              dateFormat: "Y-m", //defaults to "F Y"
+              altFormat: "F Y", //defaults to "F Y"
+              theme: "dark" // defaults to "light"
+            })
+        ],
+        altInput: true,
+        placeholder: "Select report month..."
+    });
+</script>
 </body>
 </html>
