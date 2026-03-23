@@ -27,9 +27,10 @@
     stroke-width="1"
     fill="none"
     opacity="0.1"
+    transform="rotate(25 50 50)"
   />
 
-  <g filter="url(#glow)">
+  <g filter="url(#glow)" transform="rotate(25 50 50)">
     <!-- Main leaf body: Curving elegantly down into a stem -->
     <path
       d="M50 5 C15 15, 5 45, 15 75 C25 105, 50 95, 50 95 C50 95, 75 105, 85 75 C95 45, 85 15, 50 5 Z"

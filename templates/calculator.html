@@ -48,9 +48,7 @@
 
     <div style="margin-bottom: 20px; display: flex; gap: 10px; justify-content: flex-end;">
         <a href="/upload-pdf" class="btn btn-outline" style="background:#1b1b1b; padding:10px 20px; font-size:0.9rem;">Auto-fill with AI (Upload PDF)</a>
-        {% if domain == 'logistics' %}
-        <button type="button" class="btn" style="background:#2980b9; color:white; padding:10px 20px; font-size:0.9rem; border:none; border-radius:5px; cursor:pointer;" onclick="document.getElementById('mapModal').style.display='flex'">📍 Indian Routes Tool</button>
-        {% endif %}
+        <button type="button" class="btn" style="background:#2980b9; color:white; padding:10px 20px; font-size:0.9rem; border:none; border-radius:5px; cursor:pointer;" onclick="openMapModal()">📍 Indian Routes Tool</button>
         <a href="/goals" class="btn btn-dark" style="padding:10px 20px; font-size:0.9rem;">Set Goals</a>
     </div>
 
@@ -357,27 +355,73 @@ window.addEventListener('DOMContentLoaded', function() {
             <button type="button" class="btn btn-primary" onclick="calcMapDistance()" style="flex:1;">Get Distance (km)</button>
             <button type="button" class="btn btn-outline" onclick="document.getElementById('mapModal').style.display='none'" style="flex:1;">Close</button>
         </div>
-        <p id="mapResult" style="margin-top:15px; font-weight:bold; color:#2ecc71; text-align:center;"></p>
+        <div id="mapApplySection" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid #333;">
+            <p id="mapResult" style="font-weight:bold; color:#2ecc71; text-align:center; margin-bottom:10px;"></p>
+            <div style="display:flex; gap:10px;">
+                <select id="mapTargetField" style="flex:2; padding:8px; border-radius:5px; background:#0f0f0f; border:1px solid #333; color:white;"></select>
+                <button type="button" class="btn btn-primary" onclick="applyMapDistance()" style="flex:1; font-size: 0.85rem;">Inject Value</button>
+            </div>
+        </div>
     </div>
 </div>
 
 <script>
+window.distanceInputsList = [];
+
+function openMapModal() {
+    document.getElementById('mapModal').style.display='flex';
+    document.getElementById('mapApplySection').style.display='none';
+    const sel = document.getElementById('mapTargetField');
+    sel.innerHTML = '<option value="">Select form field to auto-fill...</option>';
+    window.distanceInputsList = [];
+    
+    // Automatically find all distance-related fields on the current DOM
+    document.querySelectorAll('input[type="number"]').forEach(inp => {
+        const n = inp.name || inp.getAttribute('data-field') || '';
+        const l = inp.previousElementSibling ? inp.previousElementSibling.innerText : '';
+        if(n.includes('km') || l.toLowerCase().includes('km') || l.toLowerCase().includes('dist')) {
+            const idx = window.distanceInputsList.length;
+            window.distanceInputsList.push(inp);
+            let display = l || n;
+            const row = inp.closest('.item-row');
+            if (row) {
+                const nameInp = row.querySelector('[data-field="name"]');
+                if (nameInp && nameInp.value) display = nameInp.value + ' - ' + display;
+                else display = 'Asset Row - ' + display;
+            }
+            sel.innerHTML += `<option value="${idx}">${display}</option>`;
+        }
+    });
+}
+
+function applyMapDistance() {
+    const idx = document.getElementById('mapTargetField').value;
+    if(idx !== "") {
+        window.distanceInputsList[idx].value = window.currentMapVal;
+        document.getElementById('mapModal').style.display='none';
+    } else {
+        alert("Please select a target field from the dropdown!");
+    }
+}
+
 async function calcMapDistance() {
     const orig = document.getElementById('mapOrigin').value;
     const dest = document.getElementById('mapDest').value;
     if(!orig || !dest) return alert("Please enter both origin and destination");
     
-    document.getElementById('mapResult').innerText = 'Calculating...';
+    document.getElementById('mapApplySection').style.display='block';
+    document.getElementById('mapResult').innerText = 'Calculating active route...';
     try {
         const res = await fetch(`/api/route_distance?origin=${encodeURIComponent(orig)}&destination=${encodeURIComponent(dest)}`);
         const data = await res.json();
         if(data.distance_km) {
-            document.getElementById('mapResult').innerHTML = `Distance: <b>${data.distance_km} km</b> <button onclick="navigator.clipboard.writeText('${data.distance_km}')" style="margin-left:10px; padding:2px 8px; font-size:0.75rem; background:#444; color:white; border:none; border-radius:3px; cursor:pointer;">Copy</button>`;
+            window.currentMapVal = data.distance_km;
+            document.getElementById('mapResult').innerHTML = `Distance: <b>${data.distance_km} km</b>`;
         } else {
             document.getElementById('mapResult').innerText = 'Error calculating distance (fallback applied).';
         }
     } catch(e) {
-        document.getElementById('mapResult').innerText = 'Network error.';
+        document.getElementById('mapResult').innerText = 'Network error fetching routing API.';
     }
 }
 </script>
