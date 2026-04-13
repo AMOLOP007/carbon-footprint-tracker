@@ -1,11 +1,13 @@
+from dotenv import load_dotenv
+import os
+load_dotenv('.env.local')
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, send_file
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from pymongo import MongoClient
-from dotenv import load_dotenv
 from datetime import datetime
 from bson import ObjectId
-import os
 import io
 import json
 import random
@@ -14,6 +16,7 @@ import PyPDF2
 from authlib.integrations.flask_client import OAuth
 from openai import OpenAI
 import requests as http_requests  # renamed to avoid conflict with flask.request
+from api_guard import safe_api_call, run_tiered_ai
 
 # load env vars
 load_dotenv('.env.local')
@@ -56,6 +59,15 @@ google = oauth.register(
     server_metadata_url='https://accounts.google.com/.well-known/openid-configuration',
     client_kwargs={'scope': 'openid email profile'}
 )
+
+# groq config
+_groq_key = os.environ.get("GROQ_API_KEY")
+if _groq_key and "gsk_" in _groq_key:
+    groq_client = True # Just a boolean flag now
+    print("Groq AI: Found key successfully.")
+else:
+    groq_client = False
+    print("Groq AI: Key missing or invalid in .env.local")
 
 # openai client for AI recommendations
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -258,23 +270,51 @@ def generate_pdf(report):
     # --- HEADER ---
     pdf.set_fill_color(33, 37, 41)
     pdf.rect(0, 0, 210, 50, 'F')
-    
-    pdf.set_font("Helvetica", "B", 24)
-    pdf.set_text_color(46, 204, 113)
-    pdf.text(15, 25, "AETHERRA")
-    
-    pdf.set_font("Helvetica", "", 12)
-    pdf.set_text_color(255, 255, 255)
-    pdf.text(15, 35, f"ESG & Sustainability Report | {datetime.now().year}")
 
-    # Logo
+    # Try to render company logo on the left side of header
+    logo_rendered = False
+    text_x = 15  # default text position if no logo
     try:
         if comp and comp.get('logo_path'):
             logo_path = comp.get('logo_path')
-            if os.path.exists(logo_path) and not logo_path.lower().endswith('.svg'):
-                pdf.image(logo_path, x=160, y=10, h=30)
+            if os.path.exists(logo_path):
+                render_path = logo_path
+                # Convert SVG to a temp PNG so fpdf can handle it
+                if logo_path.lower().endswith('.svg'):
+                    try:
+                        from PIL import Image
+                        import subprocess, tempfile
+                        # Use Pillow if it can open the SVG, otherwise skip
+                        tmp_png = os.path.join(tempfile.gettempdir(), 'aetherra_logo_tmp.png')
+                        # Try cairosvg first, fallback to skipping
+                        try:
+                            import cairosvg
+                            cairosvg.svg2png(url=logo_path, write_to=tmp_png, output_width=200)
+                            render_path = tmp_png
+                        except ImportError:
+                            render_path = None  # can't convert SVG, skip it
+                    except Exception:
+                        render_path = None
+
+                if render_path and os.path.exists(render_path):
+                    pdf.image(render_path, x=12, y=10, h=30)
+                    logo_rendered = True
+                    text_x = 48  # shift text right to make room for logo
     except Exception as e:
         print("Logo render error:", e)
+
+    pdf.set_font("Helvetica", "B", 24)
+    pdf.set_text_color(46, 204, 113)
+    pdf.text(text_x, 25, "AETHERRA")
+
+    # Company name in bold
+    pdf.set_font("Helvetica", "B", 14)
+    pdf.set_text_color(255, 255, 255)
+    pdf.text(text_x, 33, comp_name)
+
+    pdf.set_font("Helvetica", "", 10)
+    pdf.set_text_color(200, 200, 200)
+    pdf.text(text_x, 40, f"ESG & Sustainability Report | {datetime.now().year}")
 
     pdf.ln(55)
 
@@ -328,35 +368,87 @@ def generate_pdf(report):
     pdf.multi_cell(0, 6, narrative)
     pdf.ln(10)
 
-    # --- ASSET INVENTORY TABLE ---
-    pdf.set_font("Helvetica", "B", 14)
-    pdf.cell(0, 10, "3. Detailed Asset Inventory", ln=True)
-    pdf.ln(2)
+    # --- ASSET INVENTORY / SCOPE BREAKDOWN (Table Base) ---
+    is_yearly = (report.get('type') == 'yearly')
     
-    # Table Header
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(60, 10, "Asset identifier", 1, 0, 'C', True)
-    pdf.cell(60, 10, "Operational Type", 1, 0, 'C', True)
-    pdf.cell(60, 10, "Emissions (tCO2e)", 1, 1, 'C', True)
-
-    # Table Rows (Realistic 10 rows)
-    pdf.set_font("Helvetica", "", 10)
-    
-    # Generate realistic asset IDs based on domain
-    prefixes = {"technology": "Node", "construction": "EX", "logistics": "TRK", "manufacturing": "M"}
-    prefix = prefixes.get(domain, "AST")
-    
-    avg_emissions = report.get('total_emissions', 0) / 10 if report.get('total_emissions', 0) > 0 else 0.5
-    
-    for i in range(1, 11):
-        asset_id = f"{prefix}-{100 + i}"
-        asset_type = "Primary Unit" if i < 5 else "Secondary System"
-        emissions = round(avg_emissions * (0.8 + random.random()*0.4), 3)
+    if is_yearly:
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, "3. Scope Emissions Breakdown", ln=True)
+        pdf.ln(2)
         
-        pdf.cell(60, 8, asset_id, 1, 0, 'C')
-        pdf.cell(60, 8, asset_type, 1, 0, 'C')
-        pdf.cell(60, 8, f"{emissions}", 1, 1, 'C')
+        pdf.set_fill_color(240, 240, 240)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(60, 10, "Emission Category", 1, 0, 'C', True)
+        pdf.cell(60, 10, "Description", 1, 0, 'C', True)
+        pdf.cell(60, 10, "Emissions (tCO2e)", 1, 1, 'C', True)
+        
+        pdf.set_font("Helvetica", "", 10)
+        pdf.cell(60, 8, "Scope 1", 1, 0, 'C')
+        pdf.cell(60, 8, "Direct Emissions", 1, 0, 'C')
+        pdf.cell(60, 8, f"{report.get('scope_1', 0)}", 1, 1, 'C')
+
+        pdf.cell(60, 8, "Scope 2", 1, 0, 'C')
+        pdf.cell(60, 8, "Indirect Energy", 1, 0, 'C')
+        pdf.cell(60, 8, f"{report.get('scope_2', 0)}", 1, 1, 'C')
+
+        pdf.cell(60, 8, "Scope 3", 1, 0, 'C')
+        pdf.cell(60, 8, "Value Chain", 1, 0, 'C')
+        pdf.cell(60, 8, f"{report.get('scope_3', 0)}", 1, 1, 'C')
+        
+        pdf.ln(10)
+        
+        # Monthly graph representation (Simple fpdf.rect bars)
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, "4. Month-by-Month Distribution", ln=True)
+        pdf.ln(5)
+        
+        breakdown = report.get('monthly_breakdown', [])
+        if breakdown:
+            max_em = max([m.get("emissions", 0) for m in breakdown]) if breakdown else 0.01
+            pdf.set_font("Helvetica", "", 8)
+            start_x = 15
+            start_y = pdf.get_y()
+            chart_height = 40
+            
+            # draw simple bars
+            for i, m in enumerate(breakdown):
+                bar_h = (m.get("emissions", 0) / max(max_em, 0.01)) * chart_height
+                pdf.set_fill_color(46, 204, 113)
+                pdf.rect(start_x + (i * 14), start_y + chart_height - bar_h, 10, bar_h, 'F')
+                # label
+                pdf.text(start_x + (i * 14) + 1, start_y + chart_height + 5, m.get("month", "")[:3])
+            
+            pdf.ln(chart_height + 15)
+
+    else:
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, "3. Detailed Asset Inventory", ln=True)
+        pdf.ln(2)
+    
+        # Table Header
+        pdf.set_fill_color(240, 240, 240)
+        pdf.set_font("Helvetica", "B", 10)
+        pdf.cell(60, 10, "Asset identifier", 1, 0, 'C', True)
+        pdf.cell(60, 10, "Operational Type", 1, 0, 'C', True)
+        pdf.cell(60, 10, "Emissions (tCO2e)", 1, 1, 'C', True)
+
+        # Table Rows (Realistic 10 rows)
+        pdf.set_font("Helvetica", "", 10)
+        
+        # Generate realistic asset IDs based on domain
+        prefixes = {"technology": "Node", "construction": "EX", "logistics": "TRK", "manufacturing": "M"}
+        prefix = prefixes.get(domain, "AST")
+        
+        avg_emissions = report.get('total_emissions', 0) / 10 if report.get('total_emissions', 0) > 0 else 0.5
+        
+        for i in range(1, 11):
+            asset_id = f"{prefix}-{100 + i}"
+            asset_type = "Primary Unit" if i < 5 else "Secondary System"
+            emissions = round(avg_emissions * (0.8 + random.random()*0.4), 3)
+            
+            pdf.cell(60, 8, asset_id, 1, 0, 'C')
+            pdf.cell(60, 8, asset_type, 1, 0, 'C')
+            pdf.cell(60, 8, f"{emissions}", 1, 1, 'C')
 
     pdf.ln(10)
     
@@ -367,12 +459,15 @@ def generate_pdf(report):
     pdf.cell(120, 10, "TOTAL CORPORATE FOOTPRINT", 1, 0, 'R', True)
     pdf.cell(60, 10, f"{report.get('total_emissions', 0)} tCO2e", 1, 1, 'C', True)
 
-    # footer
+    # footer - confidential notice first, then "generated by" line last in smaller font
     pdf.set_y(-25)
     pdf.set_font("Helvetica", "I", 8)
     pdf.set_text_color(150, 150, 150)
-    pdf.cell(0, 5, f"Report generated by Aetherra AI B2B Intelligence", ln=True, align='C')
     pdf.cell(0, 5, "CONFIDENTIAL ESG DOCUMENT - NOT FOR REDISTRIBUTION", ln=True, align='C')
+    # "Generated by Aetherra" at the very bottom, smaller but still noticeable
+    pdf.set_font("Helvetica", "I", 6)
+    pdf.set_text_color(130, 130, 130)
+    pdf.cell(0, 4, f"Report generated by Aetherra", ln=True, align='C')
 
     # return raw bytes
     return bytes(pdf.output())
@@ -553,10 +648,31 @@ def report_detail(report_id):
         flash('Report not found or access denied.', 'error')
         return redirect(url_for('reports'))
 
+    # Generate AI Narrative if missing
+    if not report.get('ai_narrative'):
+        narrative = get_chart_narrative(report)
+        reports_col.update_one({"_id": ObjectId(report_id)}, {"$set": {"ai_narrative": narrative}})
+        report['ai_narrative'] = narrative
+
     return render_template('report_detail.html', report=report,
                            user_name=session.get('user_name'))
 
-@app.route('/comprehensive-report/<report_id>')
+@app.route('/delete-report/<report_id>', methods=['POST'])
+def delete_report(report_id):
+    if not session.get('company_id'):
+        return redirect(url_for('login'))
+
+    res = reports_col.delete_one({
+        "_id": ObjectId(report_id),
+        "company_id": str(session['company_id'])
+    })
+
+    if res.deleted_count > 0:
+        flash('Report deleted successfully.', 'success')
+    else:
+        flash('Could not delete report or access denied.', 'error')
+
+    return redirect(url_for('reports'))
 def comprehensive_report(report_id):
     if not session.get('company_id'):
         return redirect(url_for('login'))
@@ -613,7 +729,8 @@ def comprehensive_report(report_id):
                            score=score_val,
                            score_text=score_txt,
                            score_color=score_clr,
-                           comp=comp)
+                           comp=comp,
+                           ai_narrative=report.get('ai_narrative', 'Generating analysis...'))
 
 # prebaked goal suggestions with actionable steps
 GOAL_PRESETS = [
@@ -909,39 +1026,67 @@ Return ONLY a raw JSON object (no markdown, no preamble):
             ]
         }
 
-    # 1. TRY GEMINI
-    gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-    if gemini_key and gemini_key != "your_ai_studio_key_here":
+    # AI TIERED CALL
+    
+    def _call_groq():
+        groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+        if not groq_client or not groq_key: return None
+        import requests as gen_requests
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+        data = {
+            "messages": [
+                {"role": "system", "content": "You are a professional sustainability analyst. Output RAW JSON ONLY."},
+                {"role": "user", "content": prompt}
+            ],
+            "model": "llama-3.3-70b-versatile",
+            "temperature": 0.7,
+            "response_format": {"type": "json_object"}
+        }
         try:
-            import google.generativeai as genai
-            genai.configure(api_key=gemini_key)
-            model = genai.GenerativeModel('gemini-1.5-flash')
-            response = model.generate_content(prompt)
-            txt = response.text.replace('```json', '').replace('```', '').strip()
-            res = json.loads(txt)
-            if res.get('title'): return res
-        except Exception as e:
-            print("Gemini Goal Err:", e)
+            r = gen_requests.post(url, headers=headers, json=data, timeout=20)
+            if r.status_code == 200:
+                return r.json()['choices'][0]['message']['content']
+        except:
+            pass
+        return None
 
-    # 2. TRY OPENAI (via guard)
-    if can_call('openai'):
-        try:
-            def _goal_ai():
-                response = openai_client.chat.completions.create(
-                    model="gpt-3.5-turbo",
-                    messages=[{"role": "user", "content": prompt}],
-                    temperature=0.7
-                )
-                return json.loads(response.choices[0].message.content)
-            
-            res = safe_api_call('openai', _goal_ai)
-            if res and isinstance(res, dict) and res.get('title'):
-                return res
-        except Exception as e:
-            print("OpenAI Goal Err:", e)
+    def _call_gemini():
+        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if not gemini_key or gemini_key == "your_ai_studio_key_here": return None
+        import requests as gen_requests
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "contents": [{"parts": [{"text": prompt}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
+        for m_id in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']:
+            try:
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_id}:generateContent?key={gemini_key}"
+                r = gen_requests.post(url, headers=headers, json=payload, timeout=20)
+                if r.status_code == 200:
+                    return r.json()['candidates'][0]['content']['parts'][0]['text']
+            except:
+                continue
+        return None
 
-    # 3. ABSOLUTE FAILSAFE (still data-driven)
-    return get_offline_goal()
+
+    def _call_openai():
+        if not openai_client: return None
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7
+        )
+        return response.choices[0].message.content
+
+    calls = {
+        'groq': _call_groq,
+        'gemini': _call_gemini,
+        'openai': _call_openai
+    }
+
+    return run_tiered_ai(calls, fallback_value=get_offline_goal())
 
 
 @app.route('/api/grid-intensity')
@@ -1021,40 +1166,92 @@ def upload_pdf():
             
             print(f"DEBUG: Extracted raw text (first 500 chars): {text[:500]}")
 
+            # 0. DUPLICATE DETECTION (SHA256 Content Hash)
+            import hashlib
+            content_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+            existing_report = reports_col.find_one({
+                "company_id": str(session['company_id']),
+                "content_hash": content_hash
+            })
+            if existing_report:
+                report_id = str(existing_report['_id'])
+                print(f"DEBUG: Duplicate report detected. Hash: {content_hash}, ID: {report_id}")
+                flash(f"Duplicate Report: This document has already been analyzed. <a href='/report/{report_id}' class='alert-link' style='color:#fff; text-decoration:underline; font-weight:bold;'>View Original Report</a>", "error")
+                return redirect(request.url)
+
             comp = companies_col.find_one({"_id": ObjectId(session['company_id'])})
             user_domain = comp.get('domain', 'technology') if comp else 'technology'
             print(f"DEBUG: User Company Domain: {user_domain}")
 
-            # 1. DOMAIN DETECTION (MANDATORY)
+            # 1. DOMAIN CLASSIFICATION (AI QUICK-PASS)
             from pdf_parser import detect_domain, parse_pdf_offline
-            detected_domain = detect_domain(text)
-            print(f"DEBUG: Detected Domain from PDF: {detected_domain}")
+            
+            # Initial heuristic check
+            heuristic_domain = detect_domain(text, fallback_domain=user_domain)
+            
+            # AI Verification pass (High Speed)
+            def _groq_classify():
+                groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+                if not groq_client or not groq_key: return None
+                import requests as gen_requests
+                prompt = f"Analyze this text snippet and return exactly one word representing the industry: 'technology', 'logistics', 'construction', or 'manufacturing'. Text: {text[:2000]}"
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                data = {
+                    "messages": [{"role": "user", "content": prompt}],
+                    "model": "llama-3.1-8b-instant",
+                    "temperature": 0.0
+                }
+                try:
+                    r = gen_requests.post(url, headers=headers, json=data, timeout=10)
+                    if r.status_code == 200:
+                        res = r.json()['choices'][0]['message']['content'].lower().strip()
+                        for d in ['technology', 'logistics', 'construction', 'manufacturing']:
+                            if d in res: return d
+                except:
+                    pass
+                return None
+
+            
+            ai_domain = safe_api_call('groq', _groq_classify)
+            detected_domain = ai_domain or heuristic_domain or user_domain
+            print(f"DEBUG: Domain Detection (Heuristic: {heuristic_domain}, AI: {ai_domain}, Final: {detected_domain})")
             
             # Normalize for comparison
-            norm_detected = detected_domain.replace("_and_IT", "").replace("_and_Transport", "").lower() if detected_domain else None
+            norm_detected = detected_domain.replace("_and_IT", "").replace("_and_Transport", "").lower()
             norm_user = user_domain.replace("_and_IT", "").replace("_and_Transport", "").lower()
 
-            if norm_detected and norm_detected != norm_user:
-                print(f"DEBUG: Domain mismatch! Detected: {norm_detected}, Expected: {norm_user}")
-                flash(f"Domain mismatch: This report belongs to the {detected_domain.replace('_', ' ').title()} industry.", "error")
+            if norm_detected != norm_user:
+                flash(f"Invalid Report: Aetherra AI detected this as a {detected_domain.replace('_', ' ').title()} report, which does not match your workspace profile ({user_domain.replace('_', ' ').title()}).", "error")
                 return redirect(request.url)
 
             # 2. AI EXTRACTION PIPELINE (3-LAYER)
             extracted = None
             prompt = f"""[CRITICAL: RETURN ONLY RAW JSON. NO MARKDOWN. NO PREAMBLE.]
-Analyze this ESG report and extract operational data. 
+Analyze this ESG report and extract EXACT operational data. 
+DO NOT hallucinate or estimate. If a number or table is not explicitly present, return 0 or an empty array.
 The document features granular asset tracking and operational metrics.
 The title or filename will be a generic company name and will NOT tell you the industry. 
 You MUST analyze the text content (keywords, assets, activities) to infer the domain.
 
 Domains to detect:
-- Technology: server, data center, cooling unit, IT
-- Logistics: warehouse, freight, delivery van, truck
-- Construction: site, hauling, excavator, temporary office
-- Manufacturing: factory, machinery, cnc, shipments
+- Technology: server, data center, cooling unit, IT, software, computing, network, digital, workstation, cloud infrastructure, latency, bandwidth.
+- Logistics: warehouse, freight, delivery van, truck, shipping, transport, cargo, courier, supply chain, dispatch, last-mile.
+- Construction: site work, hauling, excavator, temporary office, crane, concrete, civil engineering, earthmoving, structural, cement, scaffolding, contractor.
+- Manufacturing: factory, machinery, cnc, shipments, production line, assembly, industrial, fabrication, shop floor, raw materials, throughput, machining, inventory.
 
+[UNIQUE FEATURE ANALYSIS]:
+- Identify and extract the 3-5 most significant operational metrics or emission sources unique to this specific document.
+- Do NOT force data into "Scope 1/2/3" if they aren't explicitly used. Instead, use specific, identifiable categories found in the text.
+- If the report uses custom terminology (e.g., "Fuel Consumption for On-Site Generators"), use that as a category name.
+
+[IMPORTANT]: The user's company is officially registered in the {user_domain.replace('_', ' ').title()} sector. Favor this sector if the document contains supporting evidence.
+
+- LAYER 0 (Scope Detect): Determine if the report is "monthly" or "yearly". Look for "1 January - 31 December", "Annual Report", etc.
+  If YEARLY, you MUST extract scope_1, scope_2, scope_3 values from the text.
 - LAYER 1 (Structural): Find the reporting period and total net emissions.
 - LAYER 2 (Detailed Table): Extract up to 10 rows from the asset/vehicle/machine table.
+  *CRITICAL ANTI-HALLUCINATION*: ONLY extract rows with EXACT quantitative metrics found in the text. DO NOT GUESS OR ESTIMATE ASSETS. If there is no asset list, return an empty array `[]`.
   *CRITICAL*: Use exact domain-specific JSON keys for assets based on the domain you detected:
   - If Technology: {{"name": "...", "type": "...", "kwh": number}}
   - If Logistics: {{"name": "...", "type": "...", "fuel_litres": number, "distance_km": number, "hours": number}}
@@ -1071,8 +1268,13 @@ Source Text: {text[:6000]}
 
 JSON Schema:
 {{
+  "report_type": "string (monthly or yearly)",
   "detected_domain": "string",
   "reporting_period": "string",
+  "scope_1": number,
+  "scope_2": number,
+  "scope_3": number,
+  "breakdown_categories": {{"Category Name 1": number, "Category Name 2": number}},
   "warehouse_kwh": number,
   "total_freight_weight": number,
   "trucks_km": number,
@@ -1089,52 +1291,101 @@ JSON Schema:
 }}"""
 
             
-            # TIER 1: GEMINI FLASH (PRIMARY)
-            gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
-            if gemini_key and gemini_key != "your_ai_studio_key_here":
+            # TIERED AI EXTRACTION PIPELINE
+            ai_clients = {
+                'groq': groq_client,
+                'gemini_key': os.environ.get("GEMINI_API_KEY"),
+                'openai': openai_client
+            }
+            
+            def _groq_ext():
+                groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+                if not groq_client or not groq_key: return None
+                import requests as gen_requests
+                url = "https://api.groq.com/openai/v1/chat/completions"
+                headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+                data = {
+                    "messages": [
+                        {"role": "system", "content": "You are a carbond data analyst. Output RAW JSON ONLY. DO NOT guess data."},
+                        {"role": "user", "content": prompt}
+                    ],
+                    "model": "llama-3.3-70b-versatile",
+                    "temperature": 0.0,
+                    "response_format": {"type": "json_object"}
+
+                }
+                try:
+                    r = gen_requests.post(url, headers=headers, json=data, timeout=30)
+                    if r.status_code == 200:
+                        return r.json()['choices'][0]['message']['content']
+                    else:
+                        print(f"DEBUG: Groq API Error: {r.text}")
+                except Exception as e:
+                    print(f"DEBUG: Groq Request Error: {e}")
+                return None
+
+            def _gemini_ext():
+                gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+                if not gemini_key: return None
+                
+                # LAYER 1: Raw API call (Most stable for Python 3.14/Windows)
+                import requests as gen_requests
+                headers = {'Content-Type': 'application/json'}
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"response_mime_type": "application/json"}
+                }
+                
+                for m_id in ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro']:
+                    try:
+                        url = f"https://generativelanguage.googleapis.com/v1beta/models/{m_id}:generateContent?key={gemini_key}"
+                        r = gen_requests.post(url, headers=headers, json=payload, timeout=20)
+                        if r.status_code == 200:
+                            res_json = r.json()
+                            return res_json['candidates'][0]['content']['parts'][0]['text']
+                    except Exception as e:
+                        print(f"DEBUG: Gemini raw fallback failed for {m_id}: {e}")
+                
+                # LAYER 2: SDK fallback (Only if raw fails)
                 try:
                     import google.generativeai as genai
                     genai.configure(api_key=gemini_key)
-                    model = genai.GenerativeModel('gemini-2.5-flash', generation_config={"response_mime_type": "application/json"})
+                    model = genai.GenerativeModel('models/gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
                     response = model.generate_content(prompt)
-                    print(f"DEBUG: Gemini Raw Response: {response.text}")
-                    extracted_ai = json.loads(response.text)
-                    if extracted_ai.get('assets') or extracted_ai.get('total_emissions'):
-                        extracted = extracted_ai
-                        print("DEBUG: Gemini Flash PRIMARY extraction successful.")
-                except Exception as e:
-                    print(f"DEBUG: Gemini Pipeline Error: {e}")
+                    return response.text
+                except: return None
 
-            # TIER 2: OPENAI (SECONDARY FALLBACK)
-            if not extracted:
-                from api_guard import safe_api_call, can_call
-                if can_call('openai'):
-                    def _openai_call():
-                        response = openai_client.chat.completions.create(
-                            model="gpt-3.5-turbo",
-                            messages=[{"role": "system", "content": "You output only minified raw JSON."},
-                                      {"role": "user", "content": prompt}],
-                            temperature=0.1
-                        )
-                        return json.loads(response.choices[0].message.content)
-                    
-                    try:
-                        extracted = safe_api_call('openai', _openai_call)
-                        if extracted: print("DEBUG: OpenAI SECONDARY extraction successful.")
-                    except Exception as e:
-                        print(f"DEBUG: OpenAI Pipeline Error: {e}")
+            def _openai_ext():
+                if not openai_client: return None
+                response = openai_client.chat.completions.create(
+                    model="gpt-3.5-turbo",
+                    messages=[{"role": "system", "content": "You output JSON only."},
+                              {"role": "user", "content": prompt}],
+                    temperature=0.1
+                )
+                return response.choices[0].message.content
+
+            calls = {'groq': _groq_ext, 'gemini': _gemini_ext, 'openai': _openai_ext}
+            extracted = run_tiered_ai(calls)
 
             # TIER 3: OFFLINE PARSER (FINAL FALLBACK - STRONG)
             if not extracted:
-                print("DEBUG: AI engines failed. Invoking STRONG offline heuristic parser...")
+                print("DEBUG: All AI engines failed or returned empty results. Invoking STRONG offline heuristic parser...")
                 extracted = parse_pdf_offline(text, user_domain)
-                print(f"DEBUG: Offline Parser Output: {extracted}")
+                print(f"DEBUG: Offline Parser Result Sum: {extracted.get('total_emissions', 0)} tCO2e")
+                
+                # Double-check the success flag we just added to pdf_parser.py
                 if not extracted.get('success'):
-                    flash(extracted.get('message', "Document industry mismatch detected."), "error")
+                    # The offline parser also failed to find meaningful data
+                    print(f"DEBUG: Offline Parser Failure: {extracted.get('message')}")
+                    flash("AI could not read the document. Ensure it is a valid sustainability PDF or contains recognizable emission data.", "error")
                     return redirect(request.url)
+                
+                print("DEBUG: Offline Parser successful. Proceeding with heuristic data.")
 
             print(f"DEBUG: Final Extracted Data: {extracted}")
 
+            # MONTHLY HANDLING BLOCK (Existing)
             # Store in session for the calculator pre-fill
             session['extracted'] = {
                 "server_kwh": extracted.get('server_kwh', 0),
@@ -1156,8 +1407,11 @@ JSON Schema:
             flash("Aetherra AI Core has intelligent-sliced the PDF! Review the pre-filled calculator.", "success")
             return redirect(url_for('calculator'))
         except Exception as e:
-            print("System PDF failure:", e)
-            flash("AI could not read the document. Ensure it is a valid sustainability PDF.", "error")
+            import traceback
+            error_trace = traceback.format_exc()
+            print(f"CRITICAL SYSTEM FAILURE: {type(e).__name__}: {str(e)}")
+            print(f"TRACEBACK: {error_trace}")
+            flash(f"System Error: {type(e).__name__} - {str(e)}. Please check terminal for details.", "error")
             return redirect(request.url)
 
     return render_template('upload.html')
@@ -1300,7 +1554,12 @@ def calculator():
             ai_recs = {}
             if high_cats:
                 from insights import get_ai_insights
-                ai_recs = get_ai_insights(domain, high_cats, openai_client)
+                ai_clients = {
+                    'groq': groq_client,
+                    'gemini_key': os.environ.get("GEMINI_API_KEY"),
+                    'openai': openai_client
+                }
+                ai_recs = get_ai_insights(domain, high_cats, ai_clients)
 
             date_obj = datetime.strptime(report_month, "%Y-%m")
             title_month = date_obj.strftime("%B %Y")
@@ -1365,6 +1624,85 @@ def download_report(report_id):
         as_attachment=True,
         download_name=filename
     )
+
+
+def get_chart_narrative(report):
+    """
+    Generates a professional AI analysis of the report's data visualizations.
+    Focuses on explaining the 'why' behind the Pie and Bar charts.
+    """
+    from api_guard import run_tiered_ai
+    
+    # 1. Prepare data context
+    total = report.get('total_emissions', 0)
+    domain = report.get('domain', 'technology')
+    
+    if report.get('type') == 'yearly':
+        breakdown = report.get('breakdown', [])
+        breakdown_str = ", ".join([f"{b['name']}: {b['emissions']} tCO2e" for b in breakdown])
+        context = f"Yearly report for {domain} sector. Total: {total} tCO2e. Breakdown: {breakdown_str}."
+    else:
+        cats = {
+            "Transport": report.get('transport_emissions', 0),
+            "Electricity": report.get('electricity_emissions', 0),
+            "Logistics": report.get('logistics_emissions', 0),
+            "Manufacturing": report.get('manufacturing_emissions', 0)
+        }
+        breakdown_str = ", ".join([f"{k}: {v} tCO2e" for k, v in cats.items() if v > 0])
+        context = f"Monthly report for {domain} sector. Total: {total} tCO2e. Category contributions: {breakdown_str}."
+
+    prompt = f"""You are a senior ESG Data Analyst. Analyze the following emission breakdown and provide a 'Narrative analysis' that would appear under a chart.
+    DATA: {context}
+    
+    REQUIREMENTS:
+    - Explain which category dominates and what that implies for the business operations.
+    - Mention one potential 'Hidden opportunity' for reduction based on the domain ({domain}).
+    - Keep it strictly professional, insightful, and under 100 words.
+    - Return ONLY the narrative text.
+    """
+
+    def _call_groq():
+        groq_key = os.environ.get("GROQ_API_KEY", "").strip()
+        if not groq_client or not groq_key: return None
+        import requests as gen_requests
+        url = "https://api.groq.com/openai/v1/chat/completions"
+        headers = {"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"}
+        data = {
+            "messages": [{"role": "user", "content": prompt}],
+            "model": "llama-3.1-7b-instant",
+            "temperature": 0.7
+        }
+        try:
+            r = gen_requests.post(url, headers=headers, json=data, timeout=15)
+            if r.status_code == 200:
+                return r.json()['choices'][0]['message']['content']
+        except:
+            pass
+        return None
+
+    def _call_gemini():
+        gemini_key = os.environ.get("GEMINI_API_KEY", "").strip()
+        if not gemini_key: return None
+        import google.generativeai as genai
+        genai.configure(api_key=gemini_key)
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        return response.text
+
+    def _call_openai():
+        if not openai_client: return None
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.7
+        )
+        return response.choices[0].message.content
+
+    calls = {'groq': _call_groq, 'gemini': _call_gemini, 'openai': _call_openai}
+    
+    fallback = f"The {domain} sector emissions are primarily driven by the reported assets. This chart visualizes the distribution of your {total} tCO2e impact."
+    
+    return run_tiered_ai(calls, fallback_value=fallback, is_json=False)
 
 # api routes
 @app.route('/api/insights')
@@ -1464,7 +1802,6 @@ def route_distance():
     from api_guard import safe_api_call
     dist = safe_api_call('google_maps', _gmaps, fallback_fn=_free_routing)
     return {"distance_km": dist}
-
 if __name__ == '__main__':
     print("Aetherra running at http://127.0.0.1:5000")
     app.run(debug=True, use_reloader=True)

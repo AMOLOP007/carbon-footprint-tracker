@@ -15,12 +15,13 @@ _lock = Lock()
 # ---------- DAILY LIMITS (set conservatively below free tier caps) ----------
 # These are YOUR safety limits, not the provider's limits
 DAILY_LIMITS = {
-    "openai":           30,    # OpenAI: keep well under spending limits
-    "climatiq":         25,    # Climatiq free tier: 1000/month (~33/day, we cap at 25)
-    "carbon_interface": 8,     # Carbon Interface free: 200/month (~6.6/day, we cap at 8)
-    "google_maps":      15,    # Google Maps: $200 free credit, but cap anyway
+    "groq":             1000,  # Groq: primary, lightning fast, generous limits
+    "gemini":           60,    # Gemini: secondary reliable fallback
+    "openai":           20,    # OpenAI: tertiary fallback (expensive/strict limits)
+    "climatiq":         25,    # Climatiq free tier: 1000/month
+    "carbon_interface": 8,     # Carbon Interface free: 200/month
+    "google_maps":      15,    # Google Maps: $200 free credit
     "sendgrid":         20,    # SendGrid free: 100/day
-    "gemini":           30,    # Gemini API free tier limits
 }
 
 
@@ -92,19 +93,10 @@ def get_usage_summary():
 def safe_api_call(api_name, call_fn, fallback_fn=None):
     """
     Safely execute an API call with automatic limit checking and fallback.
-    
-    Args:
-        api_name: string identifier for the API (e.g. 'openai', 'climatiq')
-        call_fn: callable that makes the actual API request. Should return the result.
-        fallback_fn: callable that returns fallback data if API is unavailable or limit hit.
-    
-    Returns:
-        Result from call_fn if successful, or from fallback_fn if limit hit or error.
     """
     if not can_call(api_name):
-        print(f"API GUARD: Daily limit reached for {api_name} ({DAILY_LIMITS.get(api_name, '?')} calls). Using fallback.")
-        if fallback_fn:
-            return fallback_fn()
+        print(f"API GUARD: Daily limit reached for {api_name}. Using fallback.")
+        if fallback_fn: return fallback_fn()
         return None
     
     try:
@@ -113,6 +105,66 @@ def safe_api_call(api_name, call_fn, fallback_fn=None):
         return result
     except Exception as e:
         print(f"API GUARD: {api_name} call failed ({e}). Using fallback.")
-        if fallback_fn:
-            return fallback_fn()
+        if fallback_fn: return fallback_fn()
         return None
+
+
+def clean_json_response(text):
+    """
+    Strips markdown backticks and other common AI noise from a JSON string.
+    Finds the first '{' and last '}' to isolate the JSON object.
+    """
+    if not text or not isinstance(text, str): return text
+    
+    # Trace the boundaries of the JSON object
+    start = text.find('{')
+    end = text.rfind('}')
+    
+    if start != -1 and end != -1:
+        text = text[start:end+1]
+    
+    # Basic cleanup of common AI formatting artifacts
+    text = text.strip()
+    
+    # Remove markdown code blocks if they are still wrapping the result
+    if text.startswith("```"):
+        lines = text.splitlines()
+        if lines[0].startswith("```"): lines = lines[1:]
+        if lines and lines[-1].startswith("```"): lines = lines[:-1]
+        text = "\n".join(lines).strip()
+        
+    return text
+
+
+def run_tiered_ai(calls_dict, fallback_value=None, is_json=True):
+    """
+    Executes AI calls in a strict hierarchical order: Groq -> Gemini -> OpenAI.
+    """
+    # 1. GROQ
+    if 'groq' in calls_dict:
+        res = safe_api_call('groq', calls_dict['groq'])
+        if res:
+            if is_json and isinstance(res, str):
+                try: return json.loads(clean_json_response(res))
+                except: pass
+            else: return res
+        
+    # 2. GEMINI
+    if 'gemini' in calls_dict:
+        res = safe_api_call('gemini', calls_dict['gemini'])
+        if res:
+            if is_json and isinstance(res, str):
+                try: return json.loads(clean_json_response(res))
+                except: pass
+            else: return res
+        
+    # 3. OPENAI
+    if 'openai' in calls_dict:
+        res = safe_api_call('openai', calls_dict['openai'])
+        if res:
+            if is_json and isinstance(res, str):
+                try: return json.loads(clean_json_response(res))
+                except: pass
+            else: return res
+        
+    return fallback_value

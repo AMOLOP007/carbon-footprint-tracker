@@ -45,42 +45,27 @@
             </thead>
             <tbody>
                 {% set total = [report['total_emissions'], 0.01]|max %}
+                {% set dynamic_breakdown = report.get('breakdown') %}
+                {% if not dynamic_breakdown %}
+                    {% set dynamic_breakdown = [
+                        {"name": "🚗 Company Transport", "emissions": report.get('transport_emissions', 0)},
+                        {"name": "⚡ Office Electricity", "emissions": report.get('electricity_emissions', 0)},
+                        {"name": "📦 Logistics", "emissions": report.get('logistics_emissions', 0)},
+                        {"name": "🏭 Manufacturing", "emissions": report.get('manufacturing_emissions', 0)}
+                    ] %}
+                {% endif %}
+                
+                {% for b in dynamic_breakdown %}
                 <tr>
-                    <td>🚗 Company Transport</td>
-                    <td>{{ report['transport_emissions'] }}</td>
+                    <td>{{ b.name }}</td>
+                    <td>{{ b.emissions }}</td>
                     <td>
                         <div class="emission-bar">
-                            <div class="emission-bar-fill" style="width:{{ [(report['transport_emissions'] / total * 100)|int, 100]|min }}%"></div>
+                            <div class="emission-bar-fill" style="width:{{ [(b.emissions / total * 100)|int, 100]|min }}%"></div>
                         </div>
                     </td>
                 </tr>
-                <tr>
-                    <td>⚡ Office Electricity</td>
-                    <td>{{ report['electricity_emissions'] }}</td>
-                    <td>
-                        <div class="emission-bar">
-                            <div class="emission-bar-fill" style="width:{{ [(report['electricity_emissions'] / total * 100)|int, 100]|min }}%"></div>
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>📦 Logistics</td>
-                    <td>{{ report['logistics_emissions'] }}</td>
-                    <td>
-                        <div class="emission-bar">
-                            <div class="emission-bar-fill" style="width:{{ [(report['logistics_emissions'] / total * 100)|int, 100]|min }}%"></div>
-                        </div>
-                    </td>
-                </tr>
-                <tr>
-                    <td>🏭 Manufacturing</td>
-                    <td>{{ report['manufacturing_emissions'] }}</td>
-                    <td>
-                        <div class="emission-bar">
-                            <div class="emission-bar-fill" style="width:{{ [(report['manufacturing_emissions'] / total * 100)|int, 100]|min }}%"></div>
-                        </div>
-                    </td>
-                </tr>
+                {% endfor %}
             </tbody>
         </table>
     </div>
@@ -91,8 +76,14 @@
         <p style="color:#888; font-size:0.93rem; line-height:1.7;">
             This report covers company carbon emissions for <strong style="color:#ccc;">{{ report['month'] }}</strong>.
             Total emissions recorded: <strong style="color:#2ecc71;">{{ report['total_emissions'] }} tCO₂e</strong>.
-            Aetherra recommends focusing on the highest-emission category to maximize reduction impact.
         </p>
+        
+        <div style="margin-top:15px; padding:12px; background:rgba(46, 204, 113, 0.08); border-radius:6px; border-left:3px solid #2ecc71;">
+            <span style="display:block; color:#2ecc71; font-weight:600; font-size:0.85rem; margin-bottom:4px;">🤖 AI ANALYSIS (GROQ CORE)</span>
+            <p style="color:#bbb; font-size:0.9rem; font-style:italic; margin:0;">
+                "{{ report.get('ai_narrative', 'Analyzing data...') }}"
+            </p>
+        </div>
     </div>
 
     <!-- action buttons -->
@@ -103,6 +94,11 @@
         <a href="/comprehensive-report/{{ report['id'] }}?print=true" class="btn btn-dark">
             ⬇ Download PDF
         </a>
+        <form action="/delete-report/{{ report['id'] }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this report? This action cannot be undone.');">
+            <button type="submit" class="btn btn-outline" style="border-color: #e74c3c; color: #e74c3c; cursor: pointer;">
+                🗑 Delete Report
+            </button>
+        </form>
     </div>
 
 </div>

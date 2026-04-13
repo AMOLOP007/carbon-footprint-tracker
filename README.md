@@ -1,85 +1,79 @@
-# Aetherra - Corporate Sustainability Intelligence Platform
+# Aetherra: AI-Driven Corporate Sustainability & Carbon Intelligence
 
-Welcome to Aetherra! This is a modern, AI-powered web application designed to help businesses track, analyze, and reduce their carbon footprint through automated PDF extraction and grid intensity analysis.
+**A Collaborative Engineering Project by students of Pillai College of Engineering (PCE)** 
 
-## 📋 Section 1 — Required Installations
-Before you start, make sure you have the following installed:
+Aetherra is an advanced ESG (Environmental, Social, and Governance) intelligence platform engineered to automate corporate carbon footprint tracking through high-precision AI extraction and real-time emission factor analysis. Specifically designed for the multi-domain operational landscapes of **Technology**, **Logistics**, **Manufacturing**, and **Construction**, the platform transforms raw corporate reports into actionable, audit-ready sustainability metrics.
 
-**Python (3.9+)**
-- Download and install from: [https://www.python.org/downloads/](https://www.python.org/downloads/)
-- *During installation on Windows, make sure to check "Add python.exe to PATH".*
+---
 
-**MongoDB (Community Server)**
-- Download and install from: [https://www.mongodb.com/try/download/community](https://www.mongodb.com/try/download/community)
-- This is the local database where your companies and emission reports will be saved.
+## 👥 The Engineering Team
 
-**VS Code (Visual Studio Code)**
-- Download from: [https://code.visualstudio.com/](https://code.visualstudio.com/)
-- This is the code editor we recommend.
+This project was a collaborative effort by four SE students at **Pillai College of Engineering (PCE)**, each specializing in a critical layer of the platform's architecture:
 
-## 🚀 Section 2 — How to Download Project from GitHub
-Install Git (if you haven't already):
-- Download from: [https://git-scm.com/downloads](https://git-scm.com/downloads)
+### **Amol Manish Tamhankar** — *AI Architect & System Lead*
+Amol designed the core AI orchestration layer, moving away from brittle SDKs to robust direct-HTTP implementations. He engineered the **Multi-Tier AI Pipeline** (Groq + Gemini fallbacks) and optimized the deterministic prompting logic that ensures zero-hallucination data extraction from complex ESG PDFs.
 
-Open VS Code.
-1. **Open the Terminal**: Go to the top menu: `Terminal -> New Terminal`.
-2. **Download the Code**: Type the following command and press Enter:
+### **Rudra Thakur** — *Lead Frontend Engineer & Data Visualization*
+Rudra was responsible for the high-fidelity user interface and the dynamic reporting engine. He implemented the complex **Chart.js** logic that allows the dashboard to intelligently switch between Scope-based (Yearly) and Category-based (Monthly) visualizations based on the available data payloads.
+
+### **Onkar Vagere** — *Backend & Database Infrastructure*
+Onkar focused on the stability and security of the platform's foundation. He designed the **MongoDB schema** to handle semi-structured ESG data and implemented the **API Guard** security headers (CSP, HSTS) while hardening the Flask authentication and session management.
+
+### **Rohan Shedge** — *ESG Research & Emission Integration*
+Rohan spearheaded the sustainability research, mapping various global emission factors to the application's domain logic. He integrated the **Climatiq** and **Carbon Interface APIs** to ensure that Aetherra provides real-time, mathematically accurate carbon intensity data for corporate operations.
+
+---
+
+## 🚀 Vision & Innovation
+
+Corporate carbon auditing is traditionally manual, siloed, and prone to error. Aetherra solves this by integrating **Large Language Models (LLMs)** with real-time **Grid Intensity APIs**, ensuring that every gram of CO2 is accounted for with mathematical certainty.
+
+### 1. Multi-Tiered AI Extraction Pipeline (Groq + Gemini)
+The platform utilizes a resilient, tiered AI architecture to parse unstructured PDF reports:
+- **Groq Llama 3.3 (Primary Engine)**: Ultra-fast extraction of asset-level metrics and emission scopes.
+- **Gemini 1.5 Pro (Stability Fallback)**: Robust secondary analysis to bypass rate limits or endpoint failures.
+- **Strict Determinism**: Enforced `temperature: 0.0` extraction logic to eliminate AI hallucination and ensure 100% data consistency for every audit cycle.
+
+### 2. Sector-Specific Domain Logic
+Unlike generic trackers, Aetherra implements strict structural processing based on the company's operating sector:
+- **Strict Domain Gatekeeper**: Prevents data contamination by rejecting mismatched reports (e.g., a Logistics report uploaded to a Technology workspace).
+- **Proactive Industry Insights**: 80+ unique, peer-reviewed sustainability optimizations tailored to your specific field.
+
+### 3. Real-time Carbon Synergy
+- **Climatiq API Integration**: Fetches live regional grid intensity (gCO2/kWh) for dynamic operational updates.
+- **Carbon Interface Engine**: Live calculation of logistics and fleet emissions based on the latest global emission factors.
+
+## 🛠 Technical Architecture
+
+- **Backend Logic**: Python 3.14 (Flask Micro-framework)
+- **Database Architecture**: MongoDB (NoSQL) 
+- **Natural Language Processing**: Groq Cloud SDK & Google AI Studio
+- **Interactive UI**: Responsive Vanilla CSS & Chart.js 
+- **Cyber-Security Infrastructure**: Fully hardened with CSP, XSS-block, and HSTS headers.
+
+## 📦 Local Deployment Strategy
+
+1. **Repository Initialization**
    ```bash
-   git clone https://github.com/AMOLOP007/carbon-footprint-tracker-python.git
+   git clone https://github.com/AMOLOP007/carbon-footprint-tracker.git
+   cd carbon-footprint-tracker
    ```
-3. **Navigate into the Project**:
+
+2. **Environment Configuration**
+   Create a `.env.local` file in the root directory:
+   ```ini
+   # Database Gateway
+   MONGODB_URI=mongodb://localhost:27017/aetherra
+   
+   # Orchestration Keys (Groq, Gemini, etc.)
+   # ... [Details in local setup guide]
+   ```
+
+3. **Runtime Execution**
    ```bash
-   cd aetherra
+   pip install -r requirements.txt
+   py app.py --no-reload
    ```
 
-## 📦 Section 3 — Install Dependencies
-Install all the Python software libraries required by the project by running this command:
-
-```bash
-pip install -r requirements.txt
-```
-*(This might take a minute or two as it downloads Flask, PyMongo, AI sdks, etc.)*
-
-## 🔐 Section 4 — Create Env File
-You need to create a special configuration file for your secret passwords and API keys.
-
-1. Create a new file in the main folder named: `.env.local`
-2. Open `.env.local` and paste the following template:
-
-```ini
-# Database Connection
-MONGODB_URI=mongodb://127.0.0.1:27017/aetherra
-
-# External API Integrations
-GEMINI_API_KEY=your_gemini_key_here
-OPENAI_API_KEY=your_openai_key_here
-CLIMATIQ_API_KEY=your_climatiq_key_here
-CARBON_INTERFACE_API_KEY=your_carbon_interface_key_here
-
-# Google OAuth (Required for "Sign in with Google")
-# Get these from: https://console.cloud.google.com/
-GOOGLE_CLIENT_ID=your_google_client_id
-GOOGLE_CLIENT_SECRET=your_google_client_secret
-```
-*Note: The platform features offline fallbacks, but supplying actual API keys unlocks the AI-powered PDF extraction.*
-
-## ▶️ Section 5 — Run Project
-To start the application, run:
-
-```bash
-python app.py
-```
-Once it says "Aetherra running at http://127.0.0.1:5000", open your browser and go to: [http://127.0.0.1:5000](http://127.0.0.1:5000)
-
-## 🛠 Section 6 — Troubleshooting
-
-- **Error:** `pymongo.errors.ServerSelectionTimeoutError: localhost:27017: [WinError 10061]`
-  - **Fix:** Your MongoDB is not running. Search for "MongoDB Compass" or "MongoDB Service" on your computer and start it.
-
-- **Error:** `ModuleNotFoundError: No module named 'flask'`
-  - **Fix:** You haven't installed the dependencies. Run `pip install -r requirements.txt`.
-
-- **Google Login Error:** `redirect_uri_mismatch`
-  - **Fix:** In your Google Cloud Console, make sure "Authorized redirect URIs" includes: `http://127.0.0.1:5000/auth/google/callback`.
-
-Happy Coding! 🌍🌱
+---
+*Aetherra — Data-driven sustainability for the future.*

@@ -45,12 +45,20 @@
     </p>
 
     <h1 class="page-title">Comprehensive Carbon Report</h1>
+    {% if comp %}
+    <div style="display:flex; align-items:center; gap:12px; margin:10px 0 6px 0;">
+        {% if comp.get('logo_path') %}
+        <img src="/{{ comp.logo_path }}" alt="{{ comp.name }} Logo" style="height:48px; width:48px; object-fit:contain; border-radius:6px;">
+        {% endif %}
+        <span style="font-weight:700; font-size:1.2rem; color:#ccc;">{{ comp.name }}</span>
+    </div>
+    {% endif %}
     <p class="page-subtitle">AI-powered sustainability analysis for {{ report['month'] }}</p>
 
     <!-- sustainability score -->
     <div class="card" style="text-align:center;">
         <h3>Sustainability Score</h3>
-        <div class="score-circle" style="color: {{ score_color }}; border-color: {{ score_color }}; box-shadow: 0 0 24px {{ score_color }}40;">{{ score }}</div>
+        <div class="score-circle" style="color: {{ score_color }}; border-color: {{ score_color }}; box-shadow: 0 0 24px {{ score_color }}66;">{{ score }}</div>
         <p style="color:#aaa; font-size:1rem; margin-top:8px;">
             {{ score_text }}
         </p>
@@ -69,26 +77,23 @@
             </thead>
             <tbody>
                 {% set total = [report['total_emissions'], 0.01]|max %}
+                {% set dynamic_breakdown = report.get('breakdown') %}
+                {% if not dynamic_breakdown %}
+                    {% set dynamic_breakdown = [
+                        {"name": "Company Transport", "emissions": report.get('transport_emissions', 0)},
+                        {"name": "Electricity", "emissions": report.get('electricity_emissions', 0)},
+                        {"name": "Logistics", "emissions": report.get('logistics_emissions', 0)},
+                        {"name": "Manufacturing / Machinery", "emissions": report.get('manufacturing_emissions', 0)}
+                    ] %}
+                {% endif %}
+                
+                {% for b in dynamic_breakdown %}
                 <tr>
-                    <td>Company Transport</td>
-                    <td>{{ report['transport_emissions'] }}</td>
-                    <td>{{ (report['transport_emissions'] / total * 100) | round(1) }}%</td>
+                    <td>{{ b.name }}</td>
+                    <td>{{ b.emissions }}</td>
+                    <td>{{ (b.emissions / total * 100) | round(1) }}%</td>
                 </tr>
-                <tr>
-                    <td>Electricity</td>
-                    <td>{{ report['electricity_emissions'] }}</td>
-                    <td>{{ (report['electricity_emissions'] / total * 100) | round(1) }}%</td>
-                </tr>
-                <tr>
-                    <td>Logistics</td>
-                    <td>{{ report['logistics_emissions'] }}</td>
-                    <td>{{ (report['logistics_emissions'] / total * 100) | round(1) }}%</td>
-                </tr>
-                <tr>
-                    <td>Manufacturing / Machinery</td>
-                    <td>{{ report['manufacturing_emissions'] }}</td>
-                    <td>{{ (report['manufacturing_emissions'] / total * 100) | round(1) }}%</td>
-                </tr>
+                {% endfor %}
                 <tr style="background:#1f1f1f;">
                     <td style="color:#2ecc71; font-weight:700;">Total</td>
                     <td style="color:#2ecc71; font-weight:700;">{{ total }}</td>
@@ -98,11 +103,29 @@
         </table>
     </div>
 
+    <!-- summary -->
+    <div class="card">
+        <h3>📝 Summary</h3>
+        <p style="color:#888; font-size:0.93rem; line-height:1.7;">
+            This report covers company carbon emissions for <strong style="color:#ccc;">{{ report['month'] }}</strong>.
+            Total emissions recorded: <strong style="color:#2ecc71;">{{ report['total_emissions'] }} tCO₂e</strong>.
+        </p>
+        
+        <div style="margin-top:15px; padding:12px; background:rgba(46, 204, 113, 0.08); border-radius:6px; border-left:3px solid #2ecc71;">
+            <span style="display:block; color:#2ecc71; font-weight:600; font-size:0.85rem; margin-bottom:4px;">🤖 AI ANALYSIS (GROQ CORE)</span>
+            <p style="color:#bbb; font-size:0.9rem; font-style:italic; margin:0;">
+                "{{ report.get('ai_narrative', 'Analyzing data...') }}"
+            </p>
+        </div>
+    </div>
+
     <!-- per-asset item breakdown -->
     {% if report.get('item_breakdown') and report['item_breakdown']|length > 0 %}
     <div class="card">
         <h3>Per-Asset Emissions Breakdown</h3>
         <p style="color:#888; font-size:0.88rem; margin-bottom:12px;">Individual tracked items and their contribution to total emissions.</p>
+        
+        <!-- ... existing table and chart ... -->
         <table class="emission-table">
             <thead>
                 <tr>
@@ -119,7 +142,7 @@
                     <td style="text-transform: capitalize;">{{ item.get('type', '-') | replace('_', ' ') }}</td>
                     <td>{{ item.emissions }}</td>
                     <td>
-                        <div class="emission-bar"><div class="emission-bar-fill" style="width:{{ [(item.emissions / total * 100)|int, 100]|min }}%;"></div></div>
+                        <div class="emission-bar"><div class="emission-bar-fill" style="width: {{ [(item.emissions / total * 100)|int, 100]|min }}%;"></div></div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -160,6 +183,14 @@
                 }
             });
         </script>
+
+        <!-- AI ANALYST NARRATIVE -->
+        <div style="margin-top:20px; padding:15px; background:rgba(46, 204, 113, 0.1); border-left:4px solid #2ecc71; border-radius:4px;">
+            <h4 style="color:#2ecc71; margin-top:0; font-size:1rem;">🤖 AI Analyst Analysis</h4>
+            <p style="color:#ccc; font-size:0.92rem; font-style:italic; line-height:1.6; margin-bottom:0;">
+                {{ ai_narrative }}
+            </p>
+        </div>
     </div>
     {% endif %}
 
@@ -183,13 +214,17 @@
 
     <!-- footer actions -->
     <div class="report-footer-card">
-        <h3>Report Generated by Aetherra</h3>
-        <p>Period: {{ report['month'] }} | Total: {{ report['total_emissions'] }} tCO2e</p>
+        <p style="font-size:1.1rem; font-weight:600;">Period: {{ report['month'] }} | Total: {{ report['total_emissions'] }} tCO2e</p>
         <div style="margin-top:20px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
             <button onclick="window.print()" class="btn btn-primary" style="cursor: pointer;">Download PDF</button>
             <a href="/reports" class="btn btn-outline">Back to Reports</a>
         </div>
     </div>
+
+    <!-- Generated by Aetherra - at the very bottom, smaller but noticeable -->
+    <p style="text-align:center; font-size:0.72rem; color:#777; margin-top:24px; margin-bottom:12px; letter-spacing:0.5px; font-style:italic;">
+        Report Generated by Aetherra
+    </p>
 
 </div>
 

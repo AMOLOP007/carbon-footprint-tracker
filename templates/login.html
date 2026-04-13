@@ -27,6 +27,18 @@
             {% endif %}
         {% endwith %}
 
+        <a href="/auth/google/login" class="btn-google" style="margin-bottom: 20px;">
+            <svg width="18" height="18" viewBox="0 0 48 48">
+                <path fill="#FFC107" d="M43.6 20H24v8h11.3C33.7 33.9 29.3 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 6 1.1 8.2 3l5.7-5.7C34.3 5.1 29.4 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21c10.5 0 20-7.6 20-21 0-1.4-.1-2.7-.4-4z"/>
+                <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 19 13 24 13c3.1 0 6 1.1 8.2 3l5.7-5.7C34.3 5.1 29.4 3 24 3c-7.7 0-14.4 4.5-17.7 11.7z"/>
+                <path fill="#4CAF50" d="M24 45c5.2 0 10.1-2 13.7-5.2l-6.3-5.3C29.5 36.4 26.9 37 24 37c-5.2 0-9.6-3.1-11.3-7.5l-6.5 5C9.5 40.5 16.3 45 24 45z"/>
+                <path fill="#1976D2" d="M43.6 20H24v8h11.3c-.7 2.3-2.1 4.3-4 5.6l6.3 5.3c3.7-3.4 6.4-8.5 6.4-14.9 0-1.4-.1-2.7-.4-4z"/>
+            </svg>
+            Sign in with Google
+        </a>
+
+        <div class="divider"><span>or sign in with email</span></div>
+
         <form action="/login" method="POST" onsubmit="return validateLogin()">
             <div class="form-group">
                 <label for="email">Email Address</label>
@@ -49,19 +61,7 @@
             <button type="submit" class="btn btn-outline btn-full" style="color:#3498db; border-color:#3498db;">Join Workspace</button>
         </form>
 
-        <div class="divider"><span>or register</span></div>
-
-        <a href="/auth/google/login" class="btn-google">
-            <svg width="18" height="18" viewBox="0 0 48 48">
-                <path fill="#FFC107" d="M43.6 20H24v8h11.3C33.7 33.9 29.3 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 6 1.1 8.2 3l5.7-5.7C34.3 5.1 29.4 3 24 3 12.4 3 3 12.4 3 24s9.4 21 21 21c10.5 0 20-7.6 20-21 0-1.4-.1-2.7-.4-4z"/>
-                <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 16 19 13 24 13c3.1 0 6 1.1 8.2 3l5.7-5.7C34.3 5.1 29.4 3 24 3c-7.7 0-14.4 4.5-17.7 11.7z"/>
-                <path fill="#4CAF50" d="M24 45c5.2 0 10.1-2 13.7-5.2l-6.3-5.3C29.5 36.4 26.9 37 24 37c-5.2 0-9.6-3.1-11.3-7.5l-6.5 5C9.5 40.5 16.3 45 24 45z"/>
-                <path fill="#1976D2" d="M43.6 20H24v8h11.3c-.7 2.3-2.1 4.3-4 5.6l6.3 5.3c3.7-3.4 6.4-8.5 6.4-14.9 0-1.4-.1-2.7-.4-4z"/>
-            </svg>
-            Sign in with Google
-        </a>
-
-        <div class="auth-footer">
+        <div class="auth-footer" style="margin-top: 20px;">
             Don't have an account? <a href="/register">Sign up here</a>
         </div>
     </div>

@@ -27,15 +27,7 @@
     <h1 class="page-title">Dashboard</h1>
     <p class="page-subtitle">Welcome back, {{ user_name }} -- Here's your company's carbon overview.</p>
 
-    <!-- Security & Privacy Guarantee -->
-    <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 8px; padding: 12px 15px; margin-bottom: 25px; display: flex; align-items: center; gap: 10px; color: var(--text-light);">
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
-        </svg>
-        <span style="font-size: 0.9rem;">
-            <strong>Bank-Grade Encryption Active.</strong> Your ESG data, emission metrics, and company infrastructure records are strictly protected and confidentially secured with our comprehensive CyberSecurity framework.
-        </span>
-    </div>
+
 
     <!-- ai insight banner -->
     {% if insight %}
@@ -205,6 +197,10 @@
             </style>
         {% else %}
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <div style="margin-bottom: 15px; display: flex; justify-content: flex-end;">
+                <button id="toggleMonthly" class="btn btn-outline" onclick="setChartMode('monthly')" style="margin-right: 5px; border-color: #2ecc71; color: #2ecc71;">Monthly View</button>
+                <button id="toggleYearly" class="btn btn-outline" onclick="setChartMode('yearly')" style="border-color: #555;">Yearly View</button>
+            </div>
             <div style="display: flex; gap: 20px; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
                     <canvas id="trendChart"></canvas>
@@ -224,106 +220,168 @@
 
             <script>
                 const reportsData = {{ reports | tojson | safe }};
-                const chronoData = [...reportsData].reverse();
-
-                // get unique months in order
-                const seen = {};
-                const labels = [];
-                const trendData = [];
-                chronoData.forEach(function(r) {
-                    if (!seen[r.month]) {
-                        seen[r.month] = true;
-                        labels.push(r.month);
-                        trendData.push(r.total_emissions || 0);
-                    }
-                });
-
-                // line chart - emission trend over time
-                new Chart(document.getElementById('trendChart'), {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Total Emissions (tCO2e)',
-                            data: trendData,
-                            borderColor: '#2ecc71',
-                            backgroundColor: 'rgba(46, 204, 113, 0.1)',
-                            fill: true,
-                            tension: 0.3
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: { labels: { color: '#ccc' } },
-                            title: { display: true, text: 'Emission Trend Over Time', color: '#fff' }
-                        },
-                        scales: {
-                            x: { ticks: { color: '#888' }, grid: { color: '#333' } },
-                            y: { ticks: { color: '#888' }, grid: { color: '#333' } }
-                        }
-                    }
-                });
-
-                // doughnut chart - category breakdown from latest report
-                var latestReport = reportsData[0];
-                new Chart(document.getElementById('categoryChart'), {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['Transport', 'Electricity', 'Logistics', 'Manufacturing'],
-                        datasets: [{
-                            data: [
-                                latestReport.transport_emissions || 0,
-                                latestReport.electricity_emissions || 0,
-                                latestReport.logistics_emissions || 0,
-                                latestReport.manufacturing_emissions || 0
-                            ],
-                            backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6'],
-                            borderWidth: 0
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        plugins: {
-                            legend: { position: 'right', labels: { color: '#ccc' } },
-                            title: { display: true, text: 'Category Breakdown (Latest)', color: '#fff' }
-                        }
-                    }
-                });
-
-                // item-level horizontal bar chart
-                var itemCanvas = document.getElementById('itemChart');
-                if (itemCanvas && latestReport.item_breakdown && latestReport.item_breakdown.length > 0) {
-                    var itemLabels = latestReport.item_breakdown.map(function(i) { return i.name || 'Unnamed'; });
-                    var itemValues = latestReport.item_breakdown.map(function(i) { return i.emissions || 0; });
-                    var barColors = ['#FF6384','#36A2EB','#FFCE56','#9B59B6','#2ecc71','#e74c3c','#f39c12','#1abc9c','#e67e22','#3498db'];
-                    var colors = itemValues.map(function(v, i) { return barColors[i % barColors.length]; });
-
-                    new Chart(itemCanvas, {
-                        type: 'bar',
-                        data: {
-                            labels: itemLabels,
-                            datasets: [{
-                                label: 'Emissions per Asset (tCO2e)',
-                                data: itemValues,
-                                backgroundColor: colors,
-                                borderWidth: 0
-                            }]
-                        },
-                        options: {
-                            indexAxis: 'y',
-                            responsive: true,
-                            plugins: {
-                                legend: { display: false },
-                                title: { display: true, text: 'Per-Asset Emissions Breakdown (Latest Report)', color: '#fff' }
-                            },
-                            scales: {
-                                x: { ticks: { color: '#888' }, grid: { color: '#333' } },
-                                y: { ticks: { color: '#ccc' }, grid: { color: '#222' } }
-                            }
-                        }
-                    });
+                
+                const monthlyReports = reportsData.filter(r => r.type !== 'yearly');
+                const yearlyReports = reportsData.filter(r => r.type === 'yearly');
+                
+                let currentMode = 'monthly';
+                if(monthlyReports.length === 0 && yearlyReports.length > 0) {
+                    currentMode = 'yearly';
+                    document.getElementById('toggleMonthly').style.borderColor = '#555';
+                    document.getElementById('toggleMonthly').style.color = '';
+                    document.getElementById('toggleYearly').style.borderColor = '#2ecc71';
+                    document.getElementById('toggleYearly').style.color = '#2ecc71';
                 }
+                
+                let trendChartInst = null;
+                let catChartInst = null;
+                let itemChartInst = null;
+                
+                function setChartMode(mode) {
+                    if (mode === 'yearly' && yearlyReports.length === 0) {
+                        alert("No Yearly Reports available yet.");
+                        return;
+                    }
+                    if (mode === 'monthly' && monthlyReports.length === 0) {
+                        alert("No Monthly Reports available yet.");
+                        return;
+                    }
+                    currentMode = mode;
+                    document.getElementById('toggleMonthly').style.borderColor = (mode === 'monthly') ? '#2ecc71' : '#555';
+                    document.getElementById('toggleMonthly').style.color = (mode === 'monthly') ? '#2ecc71' : '';
+                    document.getElementById('toggleYearly').style.borderColor = (mode === 'yearly') ? '#2ecc71' : '#555';
+                    document.getElementById('toggleYearly').style.color = (mode === 'yearly') ? '#2ecc71' : '';
+                    renderCharts();
+                }
+
+                function renderCharts() {
+                    if(trendChartInst) trendChartInst.destroy();
+                    if(catChartInst) catChartInst.destroy();
+                    if(itemChartInst) { itemChartInst.destroy(); document.getElementById('itemChart').style.display = 'none'; }
+                    
+                    if(currentMode === 'monthly') {
+                        if (monthlyReports.length === 0) return;
+                        
+                        const chronoData = [...monthlyReports].reverse();
+                        const seen = {};
+                        const labels = [];
+                        const trendData = [];
+                        chronoData.forEach(function(r) {
+                            if (!seen[r.month]) {
+                                seen[r.month] = true;
+                                labels.push(r.month);
+                                trendData.push(r.total_emissions || 0);
+                            }
+                        });
+
+                        trendChartInst = new Chart(document.getElementById('trendChart'), {
+                            type: 'line',
+                            data: { labels: labels, datasets: [{ label: 'Total Emissions (tCO2e)', data: trendData, borderColor: '#2ecc71', backgroundColor: 'rgba(46, 204, 113, 0.1)', fill: true, tension: 0.3 }] },
+                            options: { responsive: true, plugins: { legend: { labels: { color: '#ccc' } }, title: { display: true, text: 'Emission Trend Over Time', color: '#fff' } }, scales: { x: { ticks: { color: '#888' }, grid: { color: '#333' } }, y: { ticks: { color: '#888' }, grid: { color: '#333' } } } }
+                        });
+
+                        var latestReport = monthlyReports[0];
+                        var catLabels = [];
+                        var catValues = [];
+                        
+                        // Check for breakdown from AI parser first, else fallback to calculator fields
+                        if (latestReport.breakdown && latestReport.breakdown.length > 0) {
+                            catLabels = latestReport.breakdown.map(b => b.name);
+                            catValues = latestReport.breakdown.map(b => b.emissions);
+                        } else {
+                            catLabels = ['Transport', 'Electricity', 'Logistics', 'Manufacturing'];
+                            catValues = [ 
+                                latestReport.transport_emissions || 0, 
+                                latestReport.electricity_emissions || 0, 
+                                latestReport.logistics_emissions || 0, 
+                                latestReport.manufacturing_emissions || 0 
+                            ];
+                        }
+
+                        catChartInst = new Chart(document.getElementById('categoryChart'), {
+                            type: 'doughnut',
+                            data: {
+                                labels: catLabels,
+                                datasets: [{
+                                    data: catValues,
+                                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#1abc9c', '#e67e22', '#3498db', '#95a5a6'], 
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: { responsive: true, plugins: { legend: { position: 'right', labels: { color: '#ccc' } }, title: { display: true, text: 'Emission Breakdown (Latest)', color: '#fff' } } }
+                        });
+
+                        var itemCanvas = document.getElementById('itemChart');
+                        if (itemCanvas && latestReport.item_breakdown && latestReport.item_breakdown.length > 0) {
+                            itemCanvas.style.display = 'block';
+                            var itemLabels = latestReport.item_breakdown.map(i => i.name || 'Unnamed');
+                            var itemValues = latestReport.item_breakdown.map(i => i.emissions || 0);
+                            var barColors = ['#FF6384','#36A2EB','#FFCE56','#9B59B6','#2ecc71','#e74c3c','#f39c12','#1abc9c','#e67e22','#3498db'];
+                            var colors = itemValues.map((v, i) => barColors[i % barColors.length]);
+
+                            itemChartInst = new Chart(itemCanvas, {
+                                type: 'bar',
+                                data: { labels: itemLabels, datasets: [{ label: 'Emissions per Asset (tCO2e)', data: itemValues, backgroundColor: colors, borderWidth: 0 }] },
+                                options: { indexAxis: 'y', responsive: true, plugins: { legend: { display: false }, title: { display: true, text: 'Per-Asset Emissions Breakdown (Latest Report)', color: '#fff' } }, scales: { x: { ticks: { color: '#888' }, grid: { color: '#333' } }, y: { ticks: { color: '#ccc' }, grid: { color: '#222' } } } }
+                            });
+                        }
+                    } else {
+                        // YEARLY LOGIC
+                        if (yearlyReports.length === 0) return;
+                        
+                        const latestYearly = yearlyReports[0];
+                        let labels = [];
+                        let trendData = [];
+                        if (latestYearly.monthly_breakdown) {
+                            labels = latestYearly.monthly_breakdown.map(m => m.month);
+                            trendData = latestYearly.monthly_breakdown.map(m => m.emissions);
+                        }
+                        
+                        trendChartInst = new Chart(document.getElementById('trendChart'), {
+                            type: 'line',
+                            data: { labels: labels, datasets: [{ label: 'Emissions (tCO2e)', data: trendData, borderColor: '#f39c12', backgroundColor: 'rgba(243, 156, 18, 0.1)', fill: true, tension: 0.3 }] },
+                            options: { responsive: true, plugins: { legend: { labels: { color: '#ccc' } }, title: { display: true, text: `Monthly Breakdown: ${latestYearly.title}`, color: '#fff' } }, scales: { x: { ticks: { color: '#888' }, grid: { color: '#333' } }, y: { ticks: { color: '#888' }, grid: { color: '#333' } } } }
+                        });
+
+                        var hasScopes = (latestYearly.scope_1 || 0) + (latestYearly.scope_2 || 0) + (latestYearly.scope_3 || 0) > 0;
+                        
+                        var pieLabels = [];
+                        var pieValues = [];
+                        var pieColors = [];
+                        var pieTitle = "";
+
+                        if (hasScopes) {
+                            pieLabels = ['Scope 1', 'Scope 2', 'Scope 3'];
+                            pieValues = [ latestYearly.scope_1 || 0, latestYearly.scope_2 || 0, latestYearly.scope_3 || 0 ];
+                            pieColors = ['#e74c3c', '#3498db', '#2ecc71'];
+                            pieTitle = "Emissions by Scope";
+                        } else if (latestYearly.breakdown && latestYearly.breakdown.length > 0) {
+                            pieLabels = latestYearly.breakdown.map(b => b.name);
+                            pieValues = latestYearly.breakdown.map(b => b.emissions);
+                            pieColors = ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#1abc9c', '#e67e22'];
+                            pieTitle = "Emissions by Category";
+                        } else {
+                            pieLabels = ['General Operations'];
+                            pieValues = [latestYearly.total_emissions || 0];
+                            pieColors = ['#95a5a6'];
+                            pieTitle = "Aggregate Emissions";
+                        }
+
+                        catChartInst = new Chart(document.getElementById('categoryChart'), {
+                            type: 'pie',
+                            data: {
+                                labels: pieLabels,
+                                datasets: [{
+                                    data: pieValues,
+                                    backgroundColor: pieColors, 
+                                    borderWidth: 0
+                                }]
+                            },
+                            options: { responsive: true, plugins: { legend: { position: 'right', labels: { color: '#ccc' } }, title: { display: true, text: pieTitle, color: '#fff' } } }
+                        });
+                    }
+                }
+                renderCharts();
             </script>
         {% endif %}
     </div>
