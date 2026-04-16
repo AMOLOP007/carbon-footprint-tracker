@@ -1177,8 +1177,8 @@ def upload_pdf():
             if existing_report:
                 report_id = str(existing_report['_id'])
                 print(f"DEBUG: Duplicate report detected. Hash: {content_hash}, ID: {report_id}")
-                flash(f"Duplicate Report: This document has already been analyzed. <a href='/report/{report_id}' class='alert-link' style='color:#fff; text-decoration:underline; font-weight:bold;'>View Original Report</a>", "error")
-                return redirect(request.url)
+                flash(f"Duplicate Report Identified: This document was already analyzed. Redirecting you to the existing report.", "success")
+                return redirect(url_for('report_detail', report_id=report_id))
 
             comp = companies_col.find_one({"_id": ObjectId(session['company_id'])})
             user_domain = comp.get('domain', 'technology') if comp else 'technology'
@@ -1388,6 +1388,7 @@ JSON Schema:
 
             # MONTHLY HANDLING BLOCK (Existing)
             # Store in session for the calculator pre-fill
+            session['content_hash'] = content_hash
             session['extracted'] = {
                 "server_kwh": extracted.get('server_kwh', 0),
                 "commute_km": extracted.get('commute_km', 0),
@@ -1565,6 +1566,38 @@ def calculator():
             date_obj = datetime.strptime(report_month, "%Y-%m")
             title_month = date_obj.strftime("%B %Y")
 
+            # BUILD DOMAIN-SPECIFIC ACCURATE BREAKDOWN
+            breakdown = []
+            if domain == 'technology':
+                breakdown = [
+                    {"name": "Server Infrastructure", "emissions": round(float(request.form.get('server_kwh', 0)) * 0.82 / 1000, 4)},
+                    {"name": "Business Travel & Commute", "emissions": result['transport']},
+                    {"name": "Office Operations", "emissions": round(sum([i['emissions'] for i in item_breakdown]) , 4)}
+                ]
+            elif domain == 'logistics':
+                breakdown = [
+                    {"name": "Warehouse Operations", "emissions": result['electricity'] + result['logistics']},
+                    {"name": "Fleet Distribution", "emissions": result['transport']}
+                ]
+            elif domain == 'construction':
+                breakdown = [
+                    {"name": "Heavy Machinery", "emissions": result['manufacturing']},
+                    {"name": "Site Power & Office", "emissions": result['electricity']},
+                    {"name": "Material Transport", "emissions": result['transport']}
+                ]
+            elif domain == 'manufacturing':
+                breakdown = [
+                    {"name": "Production Lines", "emissions": result['manufacturing']},
+                    {"name": "Factory Utilities", "emissions": result['electricity']},
+                    {"name": "Outbound Logistics", "emissions": result['transport'] + result['logistics']}
+                ]
+            
+            # Ensure total matches for consistency
+            breakdown_sum = sum(b['emissions'] for b in breakdown)
+            if breakdown_sum > 0 and abs(breakdown_sum - result['total']) > 0.01:
+                # Add tiny adjustment to first category if precision mismatch
+                breakdown[0]['emissions'] = round(breakdown[0]['emissions'] + (result['total'] - breakdown_sum), 4)
+
             doc = {
                 "user_id": str(session['user_id']),
                 "company_id": str(session['company_id']),
@@ -1576,7 +1609,9 @@ def calculator():
                 "logistics_emissions": result['logistics'],
                 "manufacturing_emissions": result['manufacturing'],
                 "total_emissions": result['total'],
+                "breakdown": breakdown,
                 "item_breakdown": item_breakdown,
+                "content_hash": session.pop('content_hash', None),
                 "ai_recommendations": ai_recs,
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }

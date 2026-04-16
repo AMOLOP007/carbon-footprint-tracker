@@ -33,41 +33,77 @@
     <p class="page-subtitle">Period: {{ report['month'] }} &nbsp;|&nbsp; Total: {{ report['total_emissions'] }} tCO₂e</p>
 
     <!-- emission breakdown -->
-    <div class="card">
-        <h3>📊 Emission Breakdown</h3>
-        <table class="emission-table">
-            <thead>
-                <tr>
-                    <th>Category</th>
-                    <th>Emissions (tCO₂e)</th>
-                    <th>Visual</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% set total = [report['total_emissions'], 0.01]|max %}
-                {% set dynamic_breakdown = report.get('breakdown') %}
-                {% if not dynamic_breakdown %}
-                    {% set dynamic_breakdown = [
-                        {"name": "🚗 Company Transport", "emissions": report.get('transport_emissions', 0)},
-                        {"name": "⚡ Office Electricity", "emissions": report.get('electricity_emissions', 0)},
-                        {"name": "📦 Logistics", "emissions": report.get('logistics_emissions', 0)},
-                        {"name": "🏭 Manufacturing", "emissions": report.get('manufacturing_emissions', 0)}
-                    ] %}
-                {% endif %}
-                
-                {% for b in dynamic_breakdown %}
-                <tr>
-                    <td>{{ b.name }}</td>
-                    <td>{{ b.emissions }}</td>
-                    <td>
-                        <div class="emission-bar">
-                            <div class="emission-bar-fill" style="width:{{ [(b.emissions / total * 100)|int, 100]|min }}%"></div>
-                        </div>
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+        <div class="card" style="flex: 2; min-width: 300px;">
+            <h3>📊 Emission Breakdown</h3>
+            <table class="emission-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Emissions (tCO₂e)</th>
+                        <th>Visual</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set total = [report['total_emissions'], 0.01]|max %}
+                    {% set dynamic_breakdown = report.get('breakdown') %}
+                    {% if not dynamic_breakdown %}
+                        {% set dynamic_breakdown = [
+                            {"name": "🚗 Company Transport", "emissions": report.get('transport_emissions', 0)},
+                            {"name": "⚡ Office Electricity", "emissions": report.get('electricity_emissions', 0)},
+                            {"name": "📦 Logistics", "emissions": report.get('logistics_emissions', 0)},
+                            {"name": "🏭 Manufacturing", "emissions": report.get('manufacturing_emissions', 0)}
+                        ] %}
+                    {% endif %}
+                    
+                    {% for b in dynamic_breakdown %}
+                    <tr>
+                        <td>{{ b.name }}</td>
+                        <td>{{ b.emissions }}</td>
+                        <td>
+                            <div class="emission-bar">
+                                <div class="emission-bar-fill" style="width:{{ [(b.emissions / total * 100)|int, 100]|min }}%"></div>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card" style="flex: 1; min-width: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.2);">
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <canvas id="detailPieChart" style="max-height: 250px;"></canvas>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const ctx = document.getElementById('detailPieChart').getContext('2d');
+                    const labels = [{% for b in dynamic_breakdown %}"{{ b.name }}"{% if not loop.last %}, {% endif %}{% endfor %}];
+                    const data = [{% for b in dynamic_breakdown %}{{ b.emissions }}{% if not loop.last %}, {% endif %}{% endfor %}];
+                    
+                    new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: data,
+                                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#2ecc71', '#e74c3c'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: {
+                                    position: 'bottom',
+                                    labels: { color: '#ccc', font: { size: 10 } }
+                                }
+                            }
+                        }
+                    });
+                });
+            </script>
+        </div>
     </div>
 
     <!-- summary -->

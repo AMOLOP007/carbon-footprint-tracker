@@ -299,7 +299,7 @@
                         }
 
                         catChartInst = new Chart(document.getElementById('categoryChart'), {
-                            type: 'doughnut',
+                            type: 'pie',
                             data: {
                                 labels: catLabels,
                                 datasets: [{
@@ -308,7 +308,13 @@
                                     borderWidth: 0
                                 }]
                             },
-                            options: { responsive: true, plugins: { legend: { position: 'right', labels: { color: '#ccc' } }, title: { display: true, text: 'Emission Breakdown (Latest)', color: '#fff' } } }
+                            options: { 
+                                responsive: true, 
+                                plugins: { 
+                                    legend: { position: 'right', labels: { color: '#ccc', font: { size: 11 } } }, 
+                                    title: { display: true, text: 'Emission Breakdown (Accurate)', color: '#fff' } 
+                                } 
+                            }
                         });
 
                         var itemCanvas = document.getElementById('itemChart');

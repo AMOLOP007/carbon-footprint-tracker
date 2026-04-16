@@ -64,43 +64,77 @@
         </p>
     </div>
 
-    <!-- full breakdown table -->
-    <div class="card">
-        <h3>Full Emission Breakdown</h3>
-        <table class="emission-table">
-            <thead>
-                <tr>
-                    <th>Category</th>
-                    <th>Amount (tCO2e)</th>
-                    <th>% of Total</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% set total = [report['total_emissions'], 0.01]|max %}
-                {% set dynamic_breakdown = report.get('breakdown') %}
-                {% if not dynamic_breakdown %}
-                    {% set dynamic_breakdown = [
-                        {"name": "Company Transport", "emissions": report.get('transport_emissions', 0)},
-                        {"name": "Electricity", "emissions": report.get('electricity_emissions', 0)},
-                        {"name": "Logistics", "emissions": report.get('logistics_emissions', 0)},
-                        {"name": "Manufacturing / Machinery", "emissions": report.get('manufacturing_emissions', 0)}
-                    ] %}
-                {% endif %}
-                
-                {% for b in dynamic_breakdown %}
-                <tr>
-                    <td>{{ b.name }}</td>
-                    <td>{{ b.emissions }}</td>
-                    <td>{{ (b.emissions / total * 100) | round(1) }}%</td>
-                </tr>
-                {% endfor %}
-                <tr style="background:#1f1f1f;">
-                    <td style="color:#2ecc71; font-weight:700;">Total</td>
-                    <td style="color:#2ecc71; font-weight:700;">{{ total }}</td>
-                    <td style="color:#2ecc71;">100%</td>
-                </tr>
-            </tbody>
-        </table>
+    <!-- full breakdown table and chart -->
+    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+        <div class="card" style="flex: 2; min-width: 300px;">
+            <h3>Full Emission Breakdown</h3>
+            <table class="emission-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Amount (tCO2e)</th>
+                        <th>% of Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set total = [report['total_emissions'], 0.01]|max %}
+                    {% set dynamic_breakdown = report.get('breakdown') %}
+                    {% if not dynamic_breakdown %}
+                        {% set dynamic_breakdown = [
+                            {"name": "Company Transport", "emissions": report.get('transport_emissions', 0)},
+                            {"name": "Electricity", "emissions": report.get('electricity_emissions', 0)},
+                            {"name": "Logistics", "emissions": report.get('logistics_emissions', 0)},
+                            {"name": "Manufacturing / Machinery", "emissions": report.get('manufacturing_emissions', 0)}
+                        ] %}
+                    {% endif %}
+                    
+                    {% for b in dynamic_breakdown %}
+                    <tr>
+                        <td>{{ b.name }}</td>
+                        <td>{{ b.emissions }}</td>
+                        <td>{{ (b.emissions / total * 100) | round(1) }}%</td>
+                    </tr>
+                    {% endfor %}
+                    <tr style="background:#1f1f1f;">
+                        <td style="color:#2ecc71; font-weight:700;">Total</td>
+                        <td style="color:#2ecc71; font-weight:700;">{{ total }}</td>
+                        <td style="color:#2ecc71;">100%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card" style="flex: 1; min-width: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.2);">
+            <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <canvas id="compBreakdownChart" style="max-height: 250px;"></canvas>
+            <script>
+                document.addEventListener('DOMContentLoaded', function() {
+                    const ctx = document.getElementById('compBreakdownChart').getContext('2d');
+                    const bdata = {{ dynamic_breakdown | tojson | safe }};
+                    const labels = bdata.map(b => b.name);
+                    const values = bdata.map(b => b.emissions);
+                    
+                    new Chart(ctx, {
+                        type: 'pie',
+                        data: {
+                            labels: labels,
+                            datasets: [{
+                                data: values,
+                                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#2ecc71', '#e74c3c'],
+                                borderWidth: 0
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: { position: 'bottom', labels: { color: '#ccc', font: { size: 10 } } }
+                            }
+                        }
+                    });
+                });
+            </script>
+        </div>
     </div>
 
     <!-- summary -->
