@@ -12,6 +12,8 @@ import io
 import json
 import random
 import PyPDF2
+import re
+import hashlib
 
 from authlib.integrations.flask_client import OAuth
 from openai import OpenAI
@@ -98,6 +100,11 @@ limiter = Limiter(
 # ========== helper functions ==========
 
 # check if login credentials match
+def generate_fuzzy_fingerprint(text):
+    """Generates a robust hash based only on alphanumeric characters, ignoring whitespace, case, and formatting."""
+    clean_text = re.sub(r'[^a-zA-Z0-9]', '', text.lower())
+    return hashlib.sha256(clean_text.encode('utf-8')).hexdigest()
+
 def check_login(email, password):
     return users_col.find_one({"email": email, "password": password})
 
@@ -1167,17 +1174,24 @@ def upload_pdf():
             
             print(f"DEBUG: Extracted raw text (first 500 chars): {text[:500]}")
 
-            # 0. DUPLICATE DETECTION (SHA256 Content Hash)
+            # 0. ROBUST DUPLICATE DETECTION (SHA256 Content Hash + Fuzzy Fingerprint)
             import hashlib
             content_hash = hashlib.sha256(text.encode('utf-8')).hexdigest()
+            fuzzy_hash = generate_fuzzy_fingerprint(text)
+            
             existing_report = reports_col.find_one({
                 "company_id": str(session['company_id']),
-                "content_hash": content_hash
+                "$or": [
+                    {"content_hash": content_hash},
+                    {"fuzzy_hash": fuzzy_hash}
+                ]
             })
+            
             if existing_report:
                 report_id = str(existing_report['_id'])
-                print(f"DEBUG: Duplicate report detected. Hash: {content_hash}, ID: {report_id}")
-                flash(f"Duplicate Report Identified: This document was already analyzed. Redirecting you to the existing report.", "success")
+                match_type = "Exact" if existing_report.get('content_hash') == content_hash else "Similar"
+                print(f"DEBUG: {match_type} duplicate report detected. ID: {report_id}")
+                flash(f"Duplicate Report Identified: A {match_type.lower()} version of this document was already analyzed. Redirecting you to the existing report.", "success")
                 return redirect(url_for('report_detail', report_id=report_id))
 
             comp = companies_col.find_one({"_id": ObjectId(session['company_id'])})
@@ -1389,6 +1403,7 @@ JSON Schema:
             # MONTHLY HANDLING BLOCK (Existing)
             # Store in session for the calculator pre-fill
             session['content_hash'] = content_hash
+            session['fuzzy_hash'] = fuzzy_hash
             session['extracted'] = {
                 "server_kwh": extracted.get('server_kwh', 0),
                 "commute_km": extracted.get('commute_km', 0),
@@ -1598,6 +1613,9 @@ def calculator():
                 # Add tiny adjustment to first category if precision mismatch
                 breakdown[0]['emissions'] = round(breakdown[0]['emissions'] + (result['total'] - breakdown_sum), 4)
 
+            content_hash = session.pop('content_hash', None)
+            fuzzy_hash = session.pop('fuzzy_hash', None)
+
             doc = {
                 "user_id": str(session['user_id']),
                 "company_id": str(session['company_id']),
@@ -1611,10 +1629,31 @@ def calculator():
                 "total_emissions": result['total'],
                 "breakdown": breakdown,
                 "item_breakdown": item_breakdown,
-                "content_hash": session.pop('content_hash', None),
+                "content_hash": content_hash,
+                "fuzzy_hash": fuzzy_hash,
                 "ai_recommendations": ai_recs,
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
+
+            # SEMANTIC DUPLICATE CHECK (Same Month + Same Total)
+            force_save = request.form.get('force_save') == 'true'
+            if not force_save:
+                # Check for same month and same emissions total
+                semantic_match = reports_col.find_one({
+                    "company_id": str(session['company_id']),
+                    "month": report_month,
+                    "total_emissions": result['total']
+                })
+                if semantic_match:
+                    # Put data back in session so we don't lose it on redirect
+                    session['extracted'] = request.form.to_dict() # Fallback pre-fill
+                    session['extracted_items'] = items
+                    session['content_hash'] = content_hash
+                    session['fuzzy_hash'] = fuzzy_hash
+                    
+                    warning_msg = f"A report for {title_month} with identical emissions ({result['total']} tCO2e) already exists."
+                    return render_template('calculator.html', domain=domain, ext=request.form, ext_items=items, 
+                                         duplicate_warning=str(semantic_match['_id']), warning_msg=warning_msg)
 
             calculations_col.insert_one(doc.copy())
             reports_col.insert_one(doc)
