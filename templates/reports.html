@@ -46,7 +46,7 @@
             <div class="emissions-badge">{{ report['total_emissions'] }} tCO₂e</div>
             <div class="report-actions" style="position: relative;">
                 <a href="/report/{{ report['id'] }}" class="btn btn-dark">View</a>
-                <a href="/comprehensive-report/{{ report['id'] }}?print=true" class="btn btn-primary">⬇ Download PDF</a>
+                <a href="/report/download/{{ report['id'] }}" class="btn btn-primary">⬇ Download PDF</a>
                 <form action="/delete-report/{{ report['id'] }}" method="POST" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this report?');">
                     <button type="submit" class="btn btn-outline" style="min-width: 40px; padding: 0 10px; border-color: #e74c3c; color: #e74c3c; margin-left: 5px;">🗑</button>
                 </form>

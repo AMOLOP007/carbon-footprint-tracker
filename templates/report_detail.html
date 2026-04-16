@@ -91,7 +91,7 @@
         <a href="/comprehensive-report/{{ report['id'] }}" class="btn btn-primary">
             📋 Comprehensive Report
         </a>
-        <a href="/comprehensive-report/{{ report['id'] }}?print=true" class="btn btn-dark">
+        <a href="/report/download/{{ report['id'] }}" class="btn btn-dark">
             ⬇ Download PDF
         </a>
         <form action="/delete-report/{{ report['id'] }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this report? This action cannot be undone.');">

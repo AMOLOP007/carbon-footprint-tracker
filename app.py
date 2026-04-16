@@ -673,6 +673,7 @@ def delete_report(report_id):
         flash('Could not delete report or access denied.', 'error')
 
     return redirect(url_for('reports'))
+@app.route('/comprehensive-report/<report_id>')
 def comprehensive_report(report_id):
     if not session.get('company_id'):
         return redirect(url_for('login'))
