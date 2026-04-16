@@ -1279,6 +1279,10 @@ Domains to detect:
   - Manufacturing: factory_kwh, fleet_km, shipment_kg
   - Technology: server_kwh, commute_km, flights
 
+- LAYER 4 (Visualization): Provide a granular breakdown of the total emissions by source.
+  *CRITICAL*: Values must be in tCO2e and the sum of the breakdown items MUST equal the total_emissions reported.
+  Use descriptive categories found in the text (e.g. "On-site Boiler Emissions", "Data Center Cooling").
+
 Source Text: {text[:6000]}
 
 JSON Schema:
@@ -1289,7 +1293,7 @@ JSON Schema:
   "scope_1": number,
   "scope_2": number,
   "scope_3": number,
-  "breakdown_categories": {{"Category Name 1": number, "Category Name 2": number}},
+  "breakdown": [{"name": "Category Name", "emissions": number}],
   "warehouse_kwh": number,
   "total_freight_weight": number,
   "trucks_km": number,
@@ -1301,7 +1305,7 @@ JSON Schema:
   "server_kwh": number,
   "commute_km": number,
   "flights": number,
-  "assets": [{{ ...domain_specific_keys... }}],
+  "assets": [{"name": "string", "type": "string", "emissions_tCO2e": number, ...}],
   "total_emissions": number
 }}"""
 
@@ -1417,7 +1421,8 @@ JSON Schema:
                 "fleet_km": extracted.get('fleet_km', 0),
                 "shipment_kg": extracted.get('shipment_kg', 0),
                 "reporting_period": extracted.get('reporting_period', 'Unknown'),
-                "detected_domain": extracted.get('detected_domain', 'Unknown')
+                "detected_domain": extracted.get('detected_domain', 'Unknown'),
+                "breakdown": extracted.get('breakdown', [])
             }
             session['extracted_items'] = extracted.get('assets', [])
             
@@ -1582,36 +1587,42 @@ def calculator():
             title_month = date_obj.strftime("%B %Y")
 
             # BUILD DOMAIN-SPECIFIC ACCURATE BREAKDOWN
-            breakdown = []
-            if domain == 'technology':
-                breakdown = [
-                    {"name": "Server Infrastructure", "emissions": round(float(request.form.get('server_kwh', 0)) * 0.82 / 1000, 4)},
-                    {"name": "Business Travel & Commute", "emissions": result['transport']},
-                    {"name": "Office Operations", "emissions": round(sum([i['emissions'] for i in item_breakdown]) , 4)}
-                ]
-            elif domain == 'logistics':
-                breakdown = [
-                    {"name": "Warehouse Operations", "emissions": result['electricity'] + result['logistics']},
-                    {"name": "Fleet Distribution", "emissions": result['transport']}
-                ]
-            elif domain == 'construction':
-                breakdown = [
-                    {"name": "Heavy Machinery", "emissions": result['manufacturing']},
-                    {"name": "Site Power & Office", "emissions": result['electricity']},
-                    {"name": "Material Transport", "emissions": result['transport']}
-                ]
-            elif domain == 'manufacturing':
-                breakdown = [
-                    {"name": "Production Lines", "emissions": result['manufacturing']},
-                    {"name": "Factory Utilities", "emissions": result['electricity']},
-                    {"name": "Outbound Logistics", "emissions": result['transport'] + result['logistics']}
-                ]
+            # PRIORITIZE AI-EXTRACTED BREAKDOWN (from PDF)
+            breakdown = session.get('extracted', {}).get('breakdown', [])
+            
+            if not breakdown:
+                if domain == 'technology':
+                    breakdown = [
+                        {"name": "Server & Cloud Infrastructure", "emissions": round(float(request.form.get('server_kwh', 0)) * 0.82 / 1000, 4)},
+                        {"name": "Business Travel & Employee Commute", "emissions": result['transport']},
+                        {"name": "Office Facilities & Managed IT Assets", "emissions": round(sum([i['emissions'] for i in item_breakdown]) , 4)}
+                    ]
+                elif domain == 'logistics':
+                    breakdown = [
+                        {"name": "Warehouse & Storage Energy", "emissions": result['electricity'] + result['logistics']},
+                        {"name": "Fleet Transport & Delivery Operations", "emissions": result['transport']}
+                    ]
+                elif domain == 'construction':
+                    breakdown = [
+                        {"name": "Heavy Machinery & Site Equipment", "emissions": result['manufacturing']},
+                        {"name": "Site Offices & Temporary Utilities", "emissions": result['electricity']},
+                        {"name": "Material Haulage & Supply Logistics", "emissions": result['transport']}
+                    ]
+                elif domain == 'manufacturing':
+                    breakdown = [
+                        {"name": "Industrial Production Lines", "emissions": result['manufacturing']},
+                        {"name": "Factory Facilities & HVAC", "emissions": result['electricity']},
+                        {"name": "Outbound Freight & Supply Chain", "emissions": result['transport'] + result['logistics']}
+                    ]
             
             # Ensure total matches for consistency
             breakdown_sum = sum(b['emissions'] for b in breakdown)
             if breakdown_sum > 0 and abs(breakdown_sum - result['total']) > 0.01:
                 # Add tiny adjustment to first category if precision mismatch
                 breakdown[0]['emissions'] = round(breakdown[0]['emissions'] + (result['total'] - breakdown_sum), 4)
+            elif breakdown_sum == 0 and result['total'] > 0:
+                # Fallback if no breakdown was found but total is positive
+                breakdown = [{"name": "Uncategorized Operations", "emissions": result['total']}]
 
             content_hash = session.pop('content_hash', None)
             fuzzy_hash = session.pop('fuzzy_hash', None)

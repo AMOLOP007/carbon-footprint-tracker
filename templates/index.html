@@ -304,8 +304,9 @@
                                 labels: catLabels,
                                 datasets: [{
                                     data: catValues,
-                                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#1abc9c', '#e67e22', '#3498db', '#95a5a6'], 
-                                    borderWidth: 0
+                                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#1abc9c', '#e67e22', '#3498db', '#f1c40f', '#e74c3c', '#95a5a6'], 
+                                    borderWidth: 0,
+                                    hoverOffset: 15
                                 }]
                             },
                             options: { 
@@ -364,8 +365,8 @@
                         } else if (latestYearly.breakdown && latestYearly.breakdown.length > 0) {
                             pieLabels = latestYearly.breakdown.map(b => b.name);
                             pieValues = latestYearly.breakdown.map(b => b.emissions);
-                            pieColors = ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#1abc9c', '#e67e22'];
-                            pieTitle = "Emissions by Category";
+                            pieColors = ['#2ecc71', '#3498db', '#9b59b6', '#f1c40f', '#e67e22', '#e74c3c', '#1abc9c', '#34495e'];
+                            pieTitle = "Emissions by Industry Sector";
                         } else {
                             pieLabels = ['General Operations'];
                             pieValues = [latestYearly.total_emissions || 0];
