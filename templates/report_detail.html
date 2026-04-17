@@ -46,15 +46,7 @@
                 </thead>
                 <tbody>
                     {% set total = [report['total_emissions'], 0.01]|max %}
-                    {% set dynamic_breakdown = report.get('breakdown') %}
-                    {% if not dynamic_breakdown %}
-                        {% set dynamic_breakdown = [
-                            {"name": "🚗 Company Transport", "emissions": report.get('transport_emissions', 0)},
-                            {"name": "⚡ Office Electricity", "emissions": report.get('electricity_emissions', 0)},
-                            {"name": "📦 Logistics", "emissions": report.get('logistics_emissions', 0)},
-                            {"name": "🏭 Manufacturing", "emissions": report.get('manufacturing_emissions', 0)}
-                        ] %}
-                    {% endif %}
+                    {% set dynamic_breakdown = report.get('breakdown', []) %}
                     
                     {% for b in dynamic_breakdown %}
                     <tr>
@@ -62,7 +54,8 @@
                         <td>{{ b.emissions }}</td>
                         <td>
                             <div class="emission-bar">
-                                <div class="emission-bar-fill" style="width:{{ [(b.emissions / total * 100)|int, 100]|min }}%"></div>
+                                {% set bar_width = [(b.emissions / total * 100)|int, 100]|min %}
+                                <div class="emission-bar-fill" data-width="{{ bar_width }}"></div>
                             </div>
                         </td>
                     </tr>
@@ -73,14 +66,24 @@
 
         <div class="card" style="flex: 1; min-width: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.2);">
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script type="application/json" id="detail-chart-data">{{ dynamic_breakdown | tojson | safe }}</script>
             <canvas id="detailPieChart" style="max-height: 250px;"></canvas>
             <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    const ctx = document.getElementById('detailPieChart').getContext('2d');
-                    const labels = [{% for b in dynamic_breakdown %}"{{ b.name }}"{% if not loop.last %}, {% endif %}{% endfor %}];
-                    const data = [{% for b in dynamic_breakdown %}{{ b.emissions }}{% if not loop.last %}, {% endif %}{% endfor %}];
+                    // Hydrate Bars
+                    document.querySelectorAll('.emission-bar-fill').forEach(el => {
+                        el.style.width = el.getAttribute('data-width') + '%';
+                    });
+
+                    // Hydrate Chart
+                    const canvas = document.getElementById('detailPieChart');
+                    const dataEl = document.getElementById('detail-chart-data');
+                    if (!canvas || !dataEl) return;
+                    const bdata = JSON.parse(dataEl.textContent || '[]');
+                    const labels = bdata.map(b => b.name);
+                    const data = bdata.map(b => b.emissions);
                     
-                    new Chart(ctx, {
+                    new Chart(canvas.getContext('2d'), {
                         type: 'pie',
                         data: {
                             labels: labels,
@@ -123,12 +126,28 @@
         </div>
     </div>
 
+    <!-- STRATEGIC AI ANALYSIS (5 Points) -->
+    {% set analysis_points = report.get('analysis_points', []) %}
+    {% if analysis_points %}
+    <div class="card" style="margin-top:20px; border-top: 3px solid #2ecc71;">
+        <h3 style="color:#2ecc71; margin-bottom:15px;">📊 Strategic AI Analysis</h3>
+        <ul style="list-style:none; padding:0; margin:0;">
+            {% for point in analysis_points %}
+            <li style="margin-bottom:12px; padding-left:24px; position:relative; color:#ccc; line-height:1.4;">
+                <span style="position:absolute; left:0; color:#2ecc71;">✓</span>
+                {{ point }}
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endif %}
+
     <!-- action buttons -->
     <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:16px;">
         <a href="/comprehensive-report/{{ report['id'] }}" class="btn btn-primary">
-            📋 Comprehensive Report
+            📋 Full Comprehensive Report
         </a>
-        <a href="/report/download/{{ report['id'] }}" class="btn btn-dark">
+        <a href="/comprehensive-report/{{ report['id'] }}?print=true" target="_blank" class="btn btn-dark">
             ⬇ Download PDF
         </a>
         <form action="/delete-report/{{ report['id'] }}" method="POST" onsubmit="return confirm('Are you sure you want to delete this report? This action cannot be undone.');">

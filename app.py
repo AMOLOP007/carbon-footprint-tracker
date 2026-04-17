@@ -265,12 +265,21 @@ def calc_company_emissions(vehicle, km, kwh, ship_dist, ship_weight, mfg_hours):
 def generate_pdf(report):
     from fpdf import FPDF
     import random
-
-    pdf = FPDF()
+    
+    # Initialization
+    pdf = FPDF(orientation='P', unit='mm', format='A4')
     pdf.add_page()
 
     # Get company info for branding and domain
-    comp = companies_col.find_one({"_id": ObjectId(report['company_id'])})
+    try:
+        c_id = report.get('company_id')
+        if isinstance(c_id, str):
+            from bson import ObjectId
+            c_id = ObjectId(c_id)
+        comp = companies_col.find_one({"_id": c_id})
+    except Exception:
+        comp = None
+        
     domain = comp.get('domain', 'technology') if comp else 'technology'
     comp_name = comp.get('name', 'Our Company') if comp else 'Our Company'
 
@@ -289,24 +298,25 @@ def generate_pdf(report):
                 # Convert SVG to a temp PNG so fpdf can handle it
                 if logo_path.lower().endswith('.svg'):
                     try:
-                        from PIL import Image
-                        import subprocess, tempfile
-                        # Use Pillow if it can open the SVG, otherwise skip
-                        tmp_png = os.path.join(tempfile.gettempdir(), 'aetherra_logo_tmp.png')
-                        # Try cairosvg first, fallback to skipping
+                        import tempfile
+                        tmp_png = os.path.join(tempfile.gettempdir(), f'aetherra_logo_{report.get("_id", random.randint(1,1000))}.png')
                         try:
                             import cairosvg
-                            cairosvg.svg2png(url=logo_path, write_to=tmp_png, output_width=200)
+                            cairosvg.svg2png(url=logo_path, write_to=tmp_png, output_width=400)
                             render_path = tmp_png
-                        except ImportError:
-                            render_path = None  # can't convert SVG, skip it
-                    except Exception:
+                        except (ImportError, Exception) as e:
+                            print(f"DEBUG: cairosvg conversion failed: {e}")
+                            render_path = None
+                    except Exception as e:
+                        print(f"DEBUG: Logo temp file error: {e}")
                         render_path = None
 
                 if render_path and os.path.exists(render_path):
                     pdf.image(render_path, x=12, y=10, h=30)
                     logo_rendered = True
                     text_x = 48  # shift text right to make room for logo
+                    # If we used a temp file, try to clean it up later if possible, 
+                    # but for now we'll just let OS manage tempdir
     except Exception as e:
         print("Logo render error:", e)
 
@@ -373,7 +383,20 @@ def generate_pdf(report):
         )
 
     pdf.multi_cell(0, 6, narrative)
-    pdf.ln(10)
+    pdf.ln(5)
+
+    # --- STRATEGIC AI ANALYSIS (5 Points) ---
+    points = report.get('analysis_points', [])
+    if points:
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.set_text_color(46, 204, 113)
+        pdf.cell(0, 10, "3. Strategic AI Analysis", ln=True)
+        pdf.ln(2)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.set_text_color(50, 50, 50)
+        for point in points[:5]:
+            pdf.multi_cell(0, 6, f"• {point}")
+        pdf.ln(5)
 
     # --- ASSET INVENTORY / SCOPE BREAKDOWN (Table Base) ---
     is_yearly = (report.get('type') == 'yearly')
@@ -385,28 +408,61 @@ def generate_pdf(report):
         
         pdf.set_fill_color(240, 240, 240)
         pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(60, 10, "Emission Category", 1, 0, 'C', True)
-        pdf.cell(60, 10, "Description", 1, 0, 'C', True)
-        pdf.cell(60, 10, "Emissions (tCO2e)", 1, 1, 'C', True)
+        pdf.cell(40, 10, "Scope", 1, 0, 'C', True)
+        pdf.cell(100, 10, "What was classified here (AI Inference)", 1, 0, 'C', True)
+        pdf.cell(40, 10, "Emissions", 1, 1, 'C', True)
         
-        pdf.set_font("Helvetica", "", 10)
-        pdf.cell(60, 8, "Scope 1", 1, 0, 'C')
-        pdf.cell(60, 8, "Direct Emissions", 1, 0, 'C')
-        pdf.cell(60, 8, f"{report.get('scope_1', 0)}", 1, 1, 'C')
+        pdf.set_font("Helvetica", "", 9)
+        s_descs = report.get('scope_descriptions', {})
+        
+        pdf.cell(40, 12, "Scope 1", 1, 0, 'C')
+        pdf.multi_cell(100, 6, s_descs.get('scope_1', 'Direct emissions from owned/controlled sources.'), 1, 'L')
+        pdf.set_xy(152, pdf.get_y() - 6 if s_descs.get('scope_1') else pdf.get_y() - 12) # Approximation for height
+        # Manual adjustment for multi_cell alignment in table is hard with FPDF, but let's try a simpler layout
+        
+        # Simplified Table for PDF consistency
+        pdf.set_xy(152, pdf.get_y() - 6) # Reset for emissions cell
+        pdf.cell(40, 6, f"{report.get('scope_1', 0)}", 1, 1, 'C')
 
-        pdf.cell(60, 8, "Scope 2", 1, 0, 'C')
-        pdf.cell(60, 8, "Indirect Energy", 1, 0, 'C')
-        pdf.cell(60, 8, f"{report.get('scope_2', 0)}", 1, 1, 'C')
+        pdf.set_font("Helvetica", "", 9)
+        pdf.cell(40, 12, "Scope 2", 1, 0, 'C')
+        pdf.multi_cell(100, 6, s_descs.get('scope_2', 'Indirect emissions from purchased electricity/heat.'), 1, 'L')
+        pdf.set_xy(152, pdf.get_y() - 6)
+        pdf.cell(40, 6, f"{report.get('scope_2', 0)}", 1, 1, 'C')
 
-        pdf.cell(60, 8, "Scope 3", 1, 0, 'C')
-        pdf.cell(60, 8, "Value Chain", 1, 0, 'C')
-        pdf.cell(60, 8, f"{report.get('scope_3', 0)}", 1, 1, 'C')
+        pdf.cell(40, 12, "Scope 3", 1, 0, 'C')
+        pdf.multi_cell(100, 6, s_descs.get('scope_3', 'All other indirect emissions in the value chain.'), 1, 'L')
+        pdf.set_xy(152, pdf.get_y() - 6)
+        pdf.cell(40, 6, f"{report.get('scope_3', 0)}", 1, 1, 'C')
         
         pdf.ln(10)
         
+        # DYNAMIC BREAKDOWN FOR YEARLY
+        pdf.set_font("Helvetica", "B", 14)
+        pdf.cell(0, 10, "4. Granular Operations Breakdown", ln=True)
+        pdf.set_font("Helvetica", "", 10)
+        pdf.multi_cell(0, 6, "The following categories represent the specific operational impact areas identified by Aetherra AI for this reporting period.")
+        pdf.ln(5)
+        
+        breakdown = report.get('breakdown', [])
+        if breakdown:
+            pdf.set_fill_color(245, 245, 245)
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(120, 10, "Activity / Category", 1, 0, 'L', True)
+            pdf.cell(60, 10, "Emissions (tCO2e)", 1, 1, 'C', True)
+            pdf.set_font("Helvetica", "", 10)
+            for b in breakdown:
+                pdf.cell(120, 8, b.get('name', 'General'), 1, 0, 'L')
+                try:
+                    val = float(b.get('emissions', 0))
+                except:
+                    val = 0.0
+                pdf.cell(60, 8, f"{val}", 1, 1, 'C')
+        pdf.ln(10)
+
         # Monthly graph representation (Simple fpdf.rect bars)
         pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 10, "4. Month-by-Month Distribution", ln=True)
+        pdf.cell(0, 10, "5. Month-by-Month Distribution", ln=True)
         pdf.ln(5)
         
         breakdown = report.get('monthly_breakdown', [])
@@ -429,36 +485,53 @@ def generate_pdf(report):
 
     else:
         pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 10, "3. Detailed Asset Inventory", ln=True)
+        pdf.cell(0, 10, "4. Emission Breakdown Analysis", ln=True)
         pdf.ln(2)
-    
-        # Table Header
-        pdf.set_fill_color(240, 240, 240)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(60, 10, "Asset identifier", 1, 0, 'C', True)
-        pdf.cell(60, 10, "Operational Type", 1, 0, 'C', True)
-        pdf.cell(60, 10, "Emissions (tCO2e)", 1, 1, 'C', True)
-
-        # Table Rows (Realistic 10 rows)
         pdf.set_font("Helvetica", "", 10)
-        
-        # Generate realistic asset IDs based on domain
-        prefixes = {"technology": "Node", "construction": "EX", "logistics": "TRK", "manufacturing": "M"}
-        prefix = prefixes.get(domain, "AST")
-        
-        avg_emissions = report.get('total_emissions', 0) / 10 if report.get('total_emissions', 0) > 0 else 0.5
-        
-        for i in range(1, 11):
-            asset_id = f"{prefix}-{100 + i}"
-            asset_type = "Primary Unit" if i < 5 else "Secondary System"
-            emissions = round(avg_emissions * (0.8 + random.random()*0.4), 3)
-            
-            pdf.cell(60, 8, asset_id, 1, 0, 'C')
-            pdf.cell(60, 8, asset_type, 1, 0, 'C')
-            pdf.cell(60, 8, f"{emissions}", 1, 1, 'C')
+        pdf.multi_cell(0, 6, "The following chart and table represent the dynamic operational breakdown detected by Aetherra AI for this reporting month.")
+        pdf.ln(5)
 
-    pdf.ln(10)
-    
+        breakdown = report.get('breakdown', [])
+        if breakdown:
+            total_em = max(report.get('total_emissions', 0), 0.01)
+            start_x = 15
+            start_y = pdf.get_y()
+            chart_width = 100
+            
+            # Simplified Visual Chart (Horizontal Bars)
+            for b in breakdown:
+                p = 0.0
+                try:
+                    ev = float(b.get('emissions', 0))
+                    p = (ev / total_em)
+                except:
+                    pass
+                
+                bar_w = p * chart_width
+                pdf.set_fill_color(46, 204, 113)
+                pdf.rect(start_x, pdf.get_y(), bar_w, 6, 'F')
+                pdf.set_font("Helvetica", "", 8)
+                pdf.set_xy(start_x + chart_width + 5, pdf.get_y())
+                pdf.cell(0, 6, f"{b.get('name', 'General')} ({round(p*100, 1)}%)")
+                pdf.ln(8)
+            
+            pdf.ln(5)
+            # Table Header
+            pdf.set_fill_color(240, 240, 240)
+            pdf.set_font("Helvetica", "B", 10)
+            pdf.cell(120, 10, "Operation / Category", 1, 0, 'L', True)
+            pdf.cell(60, 10, "Emissions (tCO2e)", 1, 1, 'C', True)
+
+            pdf.set_font("Helvetica", "", 10)
+            for b in breakdown:
+                pdf.cell(120, 8, b.get('name', 'General'), 1, 0, 'L')
+                try:
+                    val = float(b.get('emissions', 0))
+                except:
+                    val = 0.0
+                pdf.cell(60, 8, f"{val}", 1, 1, 'C')
+        pdf.ln(10)
+
     # --- TOTALS ---
     pdf.set_font("Helvetica", "B", 12)
     pdf.set_fill_color(46, 204, 113)
@@ -476,8 +549,11 @@ def generate_pdf(report):
     pdf.set_text_color(130, 130, 130)
     pdf.cell(0, 4, f"Report generated by Aetherra", ln=True, align='C')
 
-    # return raw bytes
-    return bytes(pdf.output())
+    # return raw bytes (Ensuring fpdf2 byte output)
+    out = pdf.output()
+    if isinstance(out, str):
+        return out.encode('latin-1')
+    return bytes(out)
 
 
 # ========== routes ==========
@@ -1264,6 +1340,7 @@ Domains to detect:
 
 - LAYER 0 (Scope Detect): Determine if the report is "monthly" or "yearly". Look for "1 January - 31 December", "Annual Report", etc.
   If YEARLY, you MUST extract scope_1, scope_2, scope_3 values from the text.
+  ALSO, provide a short 1-sentence description for EACH scope of what was classified under it (e.g. "Scope 1: Direct emissions from diesel power and fleet vehicles").
 - LAYER 1 (Structural): Find the reporting period and total net emissions.
 - LAYER 2 (Detailed Table): Extract up to 10 rows from the asset/vehicle/machine table.
   *CRITICAL ANTI-HALLUCINATION*: ONLY extract rows with EXACT quantitative metrics found in the text. DO NOT GUESS OR ESTIMATE ASSETS. If there is no asset list, return an empty array `[]`.
@@ -1283,6 +1360,9 @@ Domains to detect:
   *CRITICAL*: Values must be in tCO2e and the sum of the breakdown items MUST equal the total_emissions reported.
   Use descriptive categories found in the text (e.g. "On-site Boiler Emissions", "Data Center Cooling").
 
+- LAYER 5 (AI Executive Analysis): Provide exactly 5 succinct, one-sentence analysis points or strategic insights derived from this data.
+  Focus on the largest emission drivers, year-on-year changes if detectable, or specific operational inefficiencies.
+
 Source Text: {text[:6000]}
 
 JSON Schema:
@@ -1293,7 +1373,7 @@ JSON Schema:
   "scope_1": number,
   "scope_2": number,
   "scope_3": number,
-  "breakdown": [{"name": "Category Name", "emissions": number}],
+  "breakdown": [{{"name": "Category Name", "emissions": number}}],
   "warehouse_kwh": number,
   "total_freight_weight": number,
   "trucks_km": number,
@@ -1305,8 +1385,14 @@ JSON Schema:
   "server_kwh": number,
   "commute_km": number,
   "flights": number,
-  "assets": [{"name": "string", "type": "string", "emissions_tCO2e": number, ...}],
-  "total_emissions": number
+  "assets": [{{"name": "string", "type": "string", "emissions_tCO2e": number, "..." : "..."}}],
+  "total_emissions": number,
+  "analysis_points": ["string", "string", "string", "string", "string"],
+  "scope_descriptions": {{
+    "scope_1": "string",
+    "scope_2": "string",
+    "scope_3": "string"
+  }}
 }}"""
 
             
@@ -1420,9 +1506,15 @@ JSON Schema:
                 "factory_kwh": extracted.get('factory_kwh', 0),
                 "fleet_km": extracted.get('fleet_km', 0),
                 "shipment_kg": extracted.get('shipment_kg', 0),
-                "reporting_period": extracted.get('reporting_period', 'Unknown'),
-                "detected_domain": extracted.get('detected_domain', 'Unknown'),
-                "breakdown": extracted.get('breakdown', [])
+                "total_emissions": extracted.get('total_emissions', 0),
+                "reporting_period": extracted.get('reporting_period', 'Monthly Extraction'),
+                "report_type": extracted.get('report_type', 'monthly'),
+                "breakdown": extracted.get('breakdown', []),
+                "analysis_points": extracted.get('analysis_points', []),
+                "scope_1": extracted.get('scope_1', 0),
+                "scope_2": extracted.get('scope_2', 0),
+                "scope_3": extracted.get('scope_3', 0),
+                "scope_descriptions": extracted.get('scope_descriptions', {})
             }
             session['extracted_items'] = extracted.get('assets', [])
             
@@ -1627,12 +1719,18 @@ def calculator():
             content_hash = session.pop('content_hash', None)
             fuzzy_hash = session.pop('fuzzy_hash', None)
 
+            ext = session.get('extracted', {})
             doc = {
                 "user_id": str(session['user_id']),
                 "company_id": str(session['company_id']),
                 "title": f"{title_month} Emissions Report ({domain.capitalize()})",
                 "month": report_month,
                 "domain": domain,
+                "type": ext.get('report_type', 'monthly'),
+                "scope_1": ext.get('scope_1', 0),
+                "scope_2": ext.get('scope_2', 0),
+                "scope_3": ext.get('scope_3', 0),
+                "scope_descriptions": ext.get('scope_descriptions', {}),
                 "transport_emissions": result['transport'],
                 "electricity_emissions": result['electricity'],
                 "logistics_emissions": result['logistics'],
@@ -1645,6 +1743,9 @@ def calculator():
                 "ai_recommendations": ai_recs,
                 "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
+            # Clean up session
+            session.pop('extracted', None)
+            session.pop('extracted_items', None)
 
             # SEMANTIC DUPLICATE CHECK (Same Month + Same Total)
             force_save = request.form.get('force_save') == 'true'
@@ -1694,8 +1795,7 @@ def download_report(report_id):
 
     try:
         pdf_bytes = generate_pdf(report)
-    except Exception as e:
-        print("PDF generation error:", e)
+    except Exception:
         flash('Error generating PDF. Please try again.', 'error')
         return redirect(url_for('report_detail', report_id=report_id))
 

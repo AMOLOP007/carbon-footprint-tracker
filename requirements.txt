@@ -8,3 +8,5 @@ openai==1.12.0
 requests==2.31.0
 google-generativeai==0.3.2
 groq==0.4.2
+fpdf2
+cairosvg

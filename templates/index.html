@@ -208,6 +208,7 @@
                 <div style="flex: 1; min-width: 300px; background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px;">
                     <canvas id="categoryChart"></canvas>
                 </div>
+                <script type="application/json" id="reports-data">{{ reports | tojson | safe }}</script>
             </div>
 
             <!-- item breakdown chart -->
@@ -219,7 +220,7 @@
             {% endif %}
 
             <script>
-                const reportsData = {{ reports | tojson | safe }};
+                const reportsData = JSON.parse(document.getElementById('reports-data').textContent);
                 
                 const monthlyReports = reportsData.filter(r => r.type !== 'yearly');
                 const yearlyReports = reportsData.filter(r => r.type === 'yearly');
@@ -350,23 +351,21 @@
                             options: { responsive: true, plugins: { legend: { labels: { color: '#ccc' } }, title: { display: true, text: `Monthly Breakdown: ${latestYearly.title}`, color: '#fff' } }, scales: { x: { ticks: { color: '#888' }, grid: { color: '#333' } }, y: { ticks: { color: '#888' }, grid: { color: '#333' } } } }
                         });
 
-                        var hasScopes = (latestYearly.scope_1 || 0) + (latestYearly.scope_2 || 0) + (latestYearly.scope_3 || 0) > 0;
-                        
                         var pieLabels = [];
                         var pieValues = [];
-                        var pieColors = [];
+                        var pieColors = ['#2ecc71', '#3498db', '#9b59b6', '#f1c40f', '#e67e22', '#e74c3c', '#1abc9c', '#34495e', '#FF6384', '#36A2EB'];
                         var pieTitle = "";
 
-                        if (hasScopes) {
+                        // NEW: ALWAYS prioritize Granular AI Breakdown if it exists for yearly
+                        if (latestYearly.breakdown && latestYearly.breakdown.length > 0) {
+                            pieLabels = latestYearly.breakdown.map(b => b.name);
+                            pieValues = latestYearly.breakdown.map(b => b.emissions);
+                            pieTitle = "Emission Breakdown (Detailed AI Analysis)";
+                        } else if ((latestYearly.scope_1 || 0) + (latestYearly.scope_2 || 0) + (latestYearly.scope_3 || 0) > 0) {
                             pieLabels = ['Scope 1', 'Scope 2', 'Scope 3'];
                             pieValues = [ latestYearly.scope_1 || 0, latestYearly.scope_2 || 0, latestYearly.scope_3 || 0 ];
                             pieColors = ['#e74c3c', '#3498db', '#2ecc71'];
                             pieTitle = "Emissions by Scope";
-                        } else if (latestYearly.breakdown && latestYearly.breakdown.length > 0) {
-                            pieLabels = latestYearly.breakdown.map(b => b.name);
-                            pieValues = latestYearly.breakdown.map(b => b.emissions);
-                            pieColors = ['#2ecc71', '#3498db', '#9b59b6', '#f1c40f', '#e67e22', '#e74c3c', '#1abc9c', '#34495e'];
-                            pieTitle = "Emissions by Industry Sector";
                         } else {
                             pieLabels = ['General Operations'];
                             pieValues = [latestYearly.total_emissions || 0];

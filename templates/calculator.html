@@ -60,6 +60,7 @@
         {% endif %}
     {% endwith %}
 
+    <script type="application/json" id="prefilled-data">{{ ext_items | default([]) | tojson | safe }}</script>
     <form action="/calculator" method="POST" id="calcForm">
         <input type="hidden" name="items_json" id="items_json" value="">
         <input type="hidden" name="force_save" id="force_save" value="false">
@@ -341,7 +342,8 @@ function addMachine(item = {}) {
 window.addEventListener('DOMContentLoaded', function() {
     var domain = '{{ domain }}';
     // Use Jinja to securely pass the items array directly to JS
-    var prefilledItems = {{ ext_items | default([]) | tojson | safe }};
+    const dataEl = document.getElementById('prefilled-data');
+    const prefilledItems = dataEl ? JSON.parse(dataEl.textContent) : [];
     
     if (prefilledItems && prefilledItems.length > 0) {
         // Iterate over the dynamically extracted items and build the DOM

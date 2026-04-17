@@ -58,45 +58,85 @@
     <!-- sustainability score -->
     <div class="card" style="text-align:center;">
         <h3>Sustainability Score</h3>
-        <div class="score-circle" style="color: {{ score_color }}; border-color: {{ score_color }}; box-shadow: 0 0 24px {{ score_color }}66;">{{ score }}</div>
+        <div class="score-circle" data-score="{{ score }}" data-color="{{ score_color }}">{{ score }}</div>
         <p style="color:#aaa; font-size:1rem; margin-top:8px;">
             {{ score_text }}
         </p>
     </div>
 
+    <!-- STRATEGIC AI ANALYSIS (5 Points) -->
+    {% set analysis_points = report.get('analysis_points', []) %}
+    {% if analysis_points %}
+    <div class="card" style="border-left: 5px solid #2ecc71;">
+        <h3 style="color:#2ecc71; margin-bottom:20px;">📊 Strategic AI analysis (High-Impact Insights)</h3>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:20px;">
+            {% for point in analysis_points %}
+            <div style="background:rgba(46, 204, 113, 0.05); padding:15px; border-radius:8px; display:flex; gap:12px; align-items:flex-start;">
+                <div style="background:#2ecc71; color:#000; width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-weight:bold; font-size:0.8rem;">
+                    {{ loop.index }}
+                </div>
+                <div style="color:#ccc; font-size:0.95rem; line-height:1.4;">
+                    {{ point }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- scope analysis (Yearly only) -->
+    {% if report.type == 'yearly' and (report.scope_1 or report.scope_2 or report.scope_3) %}
+    <div class="card">
+        <h3>Scope-Wise Analysis (Aggregated)</h3>
+        <p style="color:#888; font-size:0.9rem; margin-bottom:15px;">Standard ESG classification with AI-inferred boundary descriptions.</p>
+        <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap:15px;">
+            <div style="background:rgba(255,255,255,0.03); padding:15px; border-radius:8px; border-left:4px solid #e74c3c;">
+                <h4 style="color:#e74c3c; margin-top:0;">Scope 1</h4>
+                <p style="color:#ccc; font-size:0.85rem;">{{ report.scope_descriptions.scope_1 if report.scope_descriptions else 'Direct emissions from owned/controlled sources.' }}</p>
+                <div style="font-size:1.2rem; font-weight:700; color:#fff; margin-top:10px;">{{ report.scope_1 }} tCO2e</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03); padding:15px; border-radius:8px; border-left:4px solid #3498db;">
+                <h4 style="color:#3498db; margin-top:0;">Scope 2</h4>
+                <p style="color:#ccc; font-size:0.85rem;">{{ report.scope_descriptions.scope_2 if report.scope_descriptions else 'Indirect emissions from purchased electricity/heat.' }}</p>
+                <div style="font-size:1.2rem; font-weight:700; color:#fff; margin-top:10px;">{{ report.scope_2 }} tCO2e</div>
+            </div>
+            <div style="background:rgba(255,255,255,0.03); padding:15px; border-radius:8px; border-left:4px solid #2ecc71;">
+                <h4 style="color:#2ecc71; margin-top:0;">Scope 3</h4>
+                <p style="color:#ccc; font-size:0.85rem;">{{ report.scope_descriptions.scope_3 if report.scope_descriptions else 'All other indirect emissions in the value chain.' }}</p>
+                <div style="font-size:1.2rem; font-weight:700; color:#fff; margin-top:10px;">{{ report.scope_3 }} tCO2e</div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- full breakdown table and chart -->
     <div style="display: flex; gap: 20px; flex-wrap: wrap;">
         <div class="card" style="flex: 2; min-width: 300px;">
-            <h3>Full Emission Breakdown</h3>
+            <h3>Full Emission Breakdown (AI Classified)</h3>
             <table class="emission-table">
                 <thead>
                     <tr>
-                        <th>Category</th>
+                        <th>Category / Activity Area</th>
                         <th>Amount (tCO2e)</th>
-                        <th>% of Total</th>
+                        <th>Share</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% set total = [report['total_emissions'], 0.01]|max %}
-                    {% set dynamic_breakdown = report.get('breakdown') %}
-                    {% if not dynamic_breakdown %}
-                        {% set dynamic_breakdown = [
-                            {"name": "Company Transport", "emissions": report.get('transport_emissions', 0)},
-                            {"name": "Electricity", "emissions": report.get('electricity_emissions', 0)},
-                            {"name": "Logistics", "emissions": report.get('logistics_emissions', 0)},
-                            {"name": "Manufacturing / Machinery", "emissions": report.get('manufacturing_emissions', 0)}
-                        ] %}
-                    {% endif %}
+                    {% set dynamic_breakdown = report.get('breakdown', []) %}
                     
                     {% for b in dynamic_breakdown %}
                     <tr>
-                        <td>{{ b.name }}</td>
+                        <td style="font-weight: 500;">{{ b.name }}</td>
                         <td>{{ b.emissions }}</td>
-                        <td>{{ (b.emissions / total * 100) | round(1) }}%</td>
+                        <td>
+                            {% set bar_width = [(b.emissions / total * 100)|int, 100]|min %}
+                            <div class="emission-bar"><div class="emission-bar-fill" data-width="{{ bar_width }}"></div></div>
+                        </td>
                     </tr>
                     {% endfor %}
                     <tr style="background:#1f1f1f;">
-                        <td style="color:#2ecc71; font-weight:700;">Total</td>
+                        <td style="color:#2ecc71; font-weight:700;">Aggregate Corporate Total</td>
                         <td style="color:#2ecc71; font-weight:700;">{{ total }}</td>
                         <td style="color:#2ecc71;">100%</td>
                     </tr>
@@ -106,33 +146,52 @@
 
         <div class="card" style="flex: 1; min-width: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(0,0,0,0.2);">
             <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+            <script type="application/json" id="comp-chart-data">{{ dynamic_breakdown | tojson | safe }}</script>
             <canvas id="compBreakdownChart" style="max-height: 250px;"></canvas>
             <script>
                 document.addEventListener('DOMContentLoaded', function() {
-                    const ctx = document.getElementById('compBreakdownChart').getContext('2d');
-                    const bdata = {{ dynamic_breakdown | tojson | safe }};
-                    const labels = bdata.map(b => b.name);
-                    const values = bdata.map(b => b.emissions);
-                    
-                    new Chart(ctx, {
-                        type: 'pie',
-                        data: {
-                            labels: labels,
-                            datasets: [{
-                                data: values,
-                                backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#2ecc71', '#e74c3c', '#1abc9c', '#f1c40f', '#e67e22', '#34495e'],
-                                borderWidth: 0,
-                                hoverOffset: 10
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: true,
-                            plugins: {
-                                legend: { position: 'bottom', labels: { color: '#ccc', font: { size: 10 } } }
-                            }
-                        }
+                    // Hydrate Score Circle
+                    const circle = document.querySelector('.score-circle');
+                    if (circle) {
+                        const clr = circle.getAttribute('data-color');
+                        circle.style.color = clr;
+                        circle.style.borderColor = clr;
+                        circle.style.boxShadow = `0 0 24px ${clr}66`;
+                    }
+
+                    // Hydrate Bars
+                    document.querySelectorAll('.emission-bar-fill').forEach(el => {
+                        el.style.width = el.getAttribute('data-width') + '%';
                     });
+
+                    // Hydrate Breakdown Chart
+                    const bCanvas = document.getElementById('compBreakdownChart');
+                    const bDataEl = document.getElementById('comp-chart-data');
+                    if (bCanvas && bDataEl) {
+                        const bdata = JSON.parse(bDataEl.textContent || '[]');
+                        const catLabels = bdata.map(b => b.name);
+                        const catValues = bdata.map(b => b.emissions);
+                        
+                        new Chart(bCanvas.getContext('2d'), {
+                            type: 'pie',
+                            data: {
+                                labels: catLabels,
+                                datasets: [{
+                                    data: catValues,
+                                    backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#9B59B6', '#2ecc71', '#e74c3c', '#1abc9c', '#f1c40f', '#e67e22', '#34495e'],
+                                    borderWidth: 0,
+                                    hoverOffset: 10
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                plugins: {
+                                    legend: { position: 'bottom', labels: { color: '#ccc', font: { size: 10 } } }
+                                }
+                            }
+                        });
+                    }
                 });
             </script>
         </div>
@@ -160,7 +219,6 @@
         <h3>Per-Asset Emissions Breakdown</h3>
         <p style="color:#888; font-size:0.88rem; margin-bottom:12px;">Individual tracked items and their contribution to total emissions.</p>
         
-        <!-- ... existing table and chart ... -->
         <table class="emission-table">
             <thead>
                 <tr>
@@ -177,7 +235,8 @@
                     <td style="text-transform: capitalize;">{{ item.get('type', '-') | replace('_', ' ') }}</td>
                     <td>{{ item.emissions }}</td>
                     <td>
-                        <div class="emission-bar"><div class="emission-bar-fill" style="width: {{ [(item.emissions / total * 100)|int, 100]|min }}%;"></div></div>
+                        {% set item_bar_width = [(item.emissions / total * 100)|int, 100]|min %}
+                        <div class="emission-bar"><div class="emission-bar-fill" data-width="{{ item_bar_width }}"></div></div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -185,37 +244,43 @@
         </table>
 
         <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <script type="application/json" id="item-chart-data">{{ report['item_breakdown'] | tojson | safe }}</script>
         <div style="margin-top:16px; background: rgba(0,0,0,0.2); padding:15px; border-radius:8px;">
             <canvas id="itemBreakdownChart"></canvas>
         </div>
         <script>
-            var items = {{ report['item_breakdown'] | tojson | safe }};
-            var names = items.map(function(i) { return i.name; });
-            var values = items.map(function(i) { return i.emissions; });
-            var palette = ['#FF6384','#36A2EB','#FFCE56','#9B59B6','#2ecc71','#e74c3c','#f39c12','#1abc9c','#e67e22','#3498db'];
-            new Chart(document.getElementById('itemBreakdownChart'), {
-                type: 'bar',
-                data: {
-                    labels: names,
-                    datasets: [{
-                        label: 'Emissions (tCO2e)',
-                        data: values,
-                        backgroundColor: values.map(function(v,i) { return palette[i % palette.length]; }),
-                        borderWidth: 0
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    plugins: {
-                        legend: { display: false },
-                        title: { display: true, text: 'Emissions by Individual Asset', color: '#fff' }
+            document.addEventListener('DOMContentLoaded', function() {
+                var iCanvas = document.getElementById('itemBreakdownChart');
+                var iDataEl = document.getElementById('item-chart-data');
+                if (!iCanvas || !iDataEl) return;
+                var items = JSON.parse(iDataEl.textContent || '[]');
+                var itemNames = items.map(function(i) { return i.name; });
+                var itemValues = items.map(function(i) { return i.emissions; });
+                var itemPalette = ['#FF6384','#36A2EB','#FFCE56','#9B59B6','#2ecc71','#e74c3c','#f39c12','#1abc9c','#e67e22','#3498db'];
+                new Chart(iCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: itemNames,
+                        datasets: [{
+                            label: 'Emissions (tCO2e)',
+                            data: itemValues,
+                            backgroundColor: itemValues.map(function(v,i) { return itemPalette[i % itemPalette.length]; }),
+                            borderWidth: 0
+                        }]
                     },
-                    scales: {
-                        x: { ticks: { color: '#888' }, grid: { color: '#333' } },
-                        y: { ticks: { color: '#ccc' }, grid: { color: '#222' } }
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        plugins: {
+                            legend: { display: false },
+                            title: { display: true, text: 'Emissions by Individual Asset', color: '#fff' }
+                        },
+                        scales: {
+                            x: { ticks: { color: '#888' }, grid: { color: '#333' } },
+                            y: { ticks: { color: '#ccc' }, grid: { color: '#222' } }
+                        }
                     }
-                }
+                });
             });
         </script>
 
